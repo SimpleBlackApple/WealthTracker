@@ -4,3 +4,15 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent
+.claude
+.cache
+.agent
+openspec
+AGENTS.md
+CLAUDE.md
+
+# temp directories
+tmpclaude-*-cwd
+nul
