@@ -24,4 +24,8 @@
     <PackageReference Include="NSwag.AspNetCore" Version="14.6.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="WealthTrackerServer.Tests" />
+  </ItemGroup>
+
 </Project>

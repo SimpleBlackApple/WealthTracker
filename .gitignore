@@ -27,3 +27,25 @@ nul
 **/keys/
 *.pem
 *.key
+
+# .NET Build Outputs
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+*.cache
+*.log
+
+# Node.js
+node_modules/
+dist/
+*.log
+.vitest/
+
+# Test Results
+TestResults/
+*.trx
+coverage/
