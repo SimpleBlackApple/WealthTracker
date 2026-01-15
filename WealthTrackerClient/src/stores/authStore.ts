@@ -18,12 +18,42 @@ interface AuthState {
   restoreAuth: () => void
 }
 
+// Helper function to get initial auth state from localStorage synchronously
+// This runs when the store is created, before the first render
+const getInitialAuthState = () => {
+  try {
+    const accessToken = localStorage.getItem('accessToken')
+    const refreshToken = localStorage.getItem('refreshToken')
+    const userStr = localStorage.getItem('user')
+
+    if (accessToken && refreshToken && userStr) {
+      const user = JSON.parse(userStr) as User
+      return {
+        user,
+        accessToken,
+        refreshToken,
+        isAuthenticated: true,
+      }
+    }
+  } catch (error) {
+    // If there's an error parsing stored data, clear it
+    console.error('Error restoring auth state:', error)
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem('user')
+  }
+
+  return {
+    user: null,
+    accessToken: null,
+    refreshToken: null,
+    isAuthenticated: false,
+  }
+}
+
 export const useAuthStore = create<AuthState>(set => ({
-  // Initial state
-  user: null,
-  accessToken: null,
-  refreshToken: null,
-  isAuthenticated: false,
+  // Initialize with stored auth state (synchronous)
+  ...getInitialAuthState(),
   isLoading: false,
   error: null,
 

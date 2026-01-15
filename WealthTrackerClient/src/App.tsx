@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { useAuth } from '@/features/auth/hooks/useAuth'
 import { LoginButton } from '@/features/auth/components/LoginButton'
 import { LogoutButton } from '@/features/auth/components/LogoutButton'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
@@ -66,7 +67,7 @@ function ProtectedPage() {
 }
 
 function App() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuth()
 
   return (
     <Routes>

@@ -5,10 +5,17 @@ import { useAuthStore } from '@/stores/authStore'
 export function AuthCallback() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { loginWithGoogle } = useAuthStore()
+  const { loginWithGoogle, isAuthenticated } = useAuthStore()
 
   useEffect(() => {
     const handleCallback = async () => {
+      // If already authenticated (e.g., from restoreAuth on refresh), skip callback processing
+      if (isAuthenticated) {
+        console.log('Already authenticated, redirecting to home')
+        navigate('/', { replace: true })
+        return
+      }
+
       const code = searchParams.get('code')
       const state = searchParams.get('state')
       const error = searchParams.get('error')
@@ -53,7 +60,7 @@ export function AuthCallback() {
         console.log('Calling loginWithGoogle with redirectUri:', redirectUri)
         await loginWithGoogle(code, redirectUri)
         console.log('Login successful')
-        navigate('/')
+        navigate('/', { replace: true })
       } catch (err) {
         console.error('Login failed:', err)
         navigate('/login')
@@ -61,7 +68,7 @@ export function AuthCallback() {
     }
 
     handleCallback()
-  }, [searchParams, loginWithGoogle, navigate])
+  }, [searchParams, loginWithGoogle, navigate, isAuthenticated])
 
   return (
     <div className="flex items-center justify-center min-h-screen">
