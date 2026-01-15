@@ -1,5 +1,6 @@
 # IDE
 .vscode
+.idea
 
 # OS
 .DS_Store
@@ -16,3 +17,13 @@ CLAUDE.md
 # temp directories
 tmpclaude-*-cwd
 nul
+
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.local
+.env.*.local
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/keys/
+*.pem
+*.key
