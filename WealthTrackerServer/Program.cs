@@ -2,8 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using WealthTrackerServer.Models;
+using WealthTrackerServer.Options;
 using WealthTrackerServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +16,16 @@ builder.Services.AddOpenApi();
 
 // Configure HttpClient for Google OAuth
 builder.Services.AddHttpClient();
+
+// Configure market data service client
+builder.Services.Configure<MarketDataOptions>(
+  builder.Configuration.GetSection("MarketDataService"));
+builder.Services.AddHttpClient<IMarketDataClient, MarketDataClient>((sp, client) =>
+{
+  var options = sp.GetRequiredService<IOptions<MarketDataOptions>>().Value;
+  client.BaseAddress = new Uri(options.BaseUrl);
+  client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
 
 // Configure PostgreSQL
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

@@ -6,6 +6,11 @@
 .DS_Store
 Thumbs.db
 
+# Cache
+__pycache__/
+*.pyc
+.venv/
+
 # Agent
 .claude
 .cache
@@ -13,6 +18,7 @@ Thumbs.db
 openspec
 AGENTS.md
 CLAUDE.md
+*Plan.md
 
 # temp directories
 tmpclaude-*-cwd
@@ -23,7 +29,6 @@ nul
 .env.local
 .env.*.local
 **/appsettings.Development.json
-**/appsettings.Production.json
 **/keys/
 *.pem
 *.key
