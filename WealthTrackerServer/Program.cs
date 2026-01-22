@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using WealthTrackerServer.OpenApi;
 using WealthTrackerServer.Models;
 using WealthTrackerServer.Options;
 using WealthTrackerServer.Services;
@@ -12,7 +13,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+  options.AddOperationTransformer<ScannerExamplesOperationTransformer>();
+});
 
 // Configure HttpClient for Google OAuth
 builder.Services.AddHttpClient();

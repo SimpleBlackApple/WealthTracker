@@ -15,18 +15,18 @@ public class ScannerController : ControllerBase
         _marketDataClient = marketDataClient;
     }
 
-    [HttpPost("screener")]
-    [ProducesResponseType(typeof(ScreenerResponse), StatusCodes.Status200OK)]
+    [HttpPost("day-gainers")]
+    [ProducesResponseType(typeof(DayGainersResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
-    public async Task<ActionResult<ScreenerResponse>> RunScreener(
-        [FromBody] ScreenerRequest request,
+    public async Task<ActionResult<DayGainersResponse>> RunDayGainers(
+        [FromBody] DayGainersRequest request,
         CancellationToken cancellationToken)
     {
-        NormalizeRequest(request);
+        NormalizeScannerRequest(request);
 
         try
         {
-            var response = await _marketDataClient.GetScreenerAsync(request, cancellationToken);
+            var response = await _marketDataClient.GetDayGainersAsync(request, cancellationToken);
             return Ok(response);
         }
         catch (HttpRequestException ex)
@@ -35,21 +35,111 @@ public class ScannerController : ControllerBase
         }
     }
 
-    private static void NormalizeRequest(ScreenerRequest request)
+    [HttpPost("hod-breakouts")]
+    [ProducesResponseType(typeof(HodVwapMomentumResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<HodVwapMomentumResponse>> RunHodBreakouts(
+        [FromBody] HodBreakoutsRequest request,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Type))
+        NormalizeScannerRequest(request);
+
+        try
         {
-            request.Type = "gappers";
+            var response = await _marketDataClient.GetHodBreakoutsAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("vwap-breakouts")]
+    [ProducesResponseType(typeof(HodVwapMomentumResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<HodVwapMomentumResponse>> RunVwapBreakouts(
+        [FromBody] VwapBreakoutsRequest request,
+        CancellationToken cancellationToken)
+    {
+        NormalizeScannerRequest(request);
+
+        try
+        {
+            var response = await _marketDataClient.GetVwapBreakoutsAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("hod-approach")]
+    [ProducesResponseType(typeof(HodVwapApproachResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<HodVwapApproachResponse>> RunHodApproach(
+        [FromBody] HodApproachRequest request,
+        CancellationToken cancellationToken)
+    {
+        NormalizeScannerRequest(request);
+
+        try
+        {
+            var response = await _marketDataClient.GetHodApproachAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("vwap-approach")]
+    [ProducesResponseType(typeof(HodVwapApproachResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<HodVwapApproachResponse>> RunVwapApproach(
+        [FromBody] VwapApproachRequest request,
+        CancellationToken cancellationToken)
+    {
+        NormalizeScannerRequest(request);
+
+        try
+        {
+            var response = await _marketDataClient.GetVwapApproachAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
+        }
+    }
+
+    private static void NormalizeScannerRequest(ScannerUniverseRequest request)
+    {
+        if (request.UniverseLimit <= 0)
+        {
+            request.UniverseLimit = 200;
         }
 
         if (request.Limit <= 0)
         {
-            request.Limit = 100;
+            request.Limit = 25;
         }
 
-        if (string.IsNullOrWhiteSpace(request.Session))
+        if (request.MinPrice < 1.5)
         {
-            request.Session = "regular";
+            request.MinPrice = 1.5;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Interval))
+        {
+            request.Interval = "5m";
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Period))
+        {
+            request.Period = "1d";
         }
 
         if (request.AsOf is null)

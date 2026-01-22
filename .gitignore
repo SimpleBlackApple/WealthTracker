@@ -19,6 +19,8 @@ openspec
 AGENTS.md
 CLAUDE.md
 *Plan.md
+!docs/ScannerPlan.md
+!docs/ScannerImrovePlan.md
 
 # temp directories
 tmpclaude-*-cwd
