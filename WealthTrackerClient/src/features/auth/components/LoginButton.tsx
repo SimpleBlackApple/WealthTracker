@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { useAuthStore } from '@/stores/authStore'
 
 declare global {
   interface Window {
@@ -17,7 +16,6 @@ declare global {
 
 export function LoginButton() {
   const [isLoading, setIsLoading] = useState(false)
-  const { loginWithGoogle } = useAuthStore()
 
   const handleLogin = () => {
     setIsLoading(true)

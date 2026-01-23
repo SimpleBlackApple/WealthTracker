@@ -2,9 +2,10 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { LoginButton } from '@/features/auth/components/LoginButton'
-import { LogoutButton } from '@/features/auth/components/LogoutButton'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
 import { useAuthGuard } from '@/features/auth/hooks/useAuthGuard'
+import { AppShell } from '@/components/layout/AppShell'
+import { ScannersPage } from '@/features/scanners/pages/ScannersPage'
 
 function LoginPage() {
   return (
@@ -29,39 +30,17 @@ function ProtectedPage() {
   const { user } = useAuthStore()
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold">WealthTracker</h1>
-            </div>
-            <div className="flex items-center">
-              <LogoutButton />
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="border-4 border-dashed border-gray-200 rounded-lg p-12">
-            <h2 className="text-2xl font-bold mb-4">
-              Welcome, {user?.name || 'User'}!
-            </h2>
-            <p className="text-gray-600">
-              You are now logged in. This is a protected page.
-            </p>
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-2">Your Account Info:</h3>
-              <ul className="list-disc list-inside text-gray-600">
-                <li>Email: {user?.email}</li>
-                <li>User ID: {user?.id}</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </main>
+    <div className="rounded-lg border bg-card p-6">
+      <h2 className="text-lg font-semibold">
+        Welcome, {user?.name || 'User'}!
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Use the Scanners page to explore market opportunities.
+      </p>
+      <div className="mt-4 text-sm text-muted-foreground">
+        <div>Email: {user?.email}</div>
+        <div>User ID: {user?.id}</div>
+      </div>
     </div>
   )
 }
@@ -76,9 +55,16 @@ function App() {
       <Route
         path="/"
         element={
-          isAuthenticated ? <ProtectedPage /> : <Navigate to="/login" replace />
+          isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
         }
-      />
+      >
+        <Route
+          index
+          element={<Navigate to="/scanners/day-gainers" replace />}
+        />
+        <Route path="scanners/:scannerId" element={<ScannersPage />} />
+        <Route path="account" element={<ProtectedPage />} />
+      </Route>
     </Routes>
   )
 }
