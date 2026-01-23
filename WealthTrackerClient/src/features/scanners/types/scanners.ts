@@ -146,8 +146,8 @@ export type ScannerDefinition<TScannerId extends ScannerId> = {
 }
 
 const baseDefaults: Omit<ScannerUniverseRequest, 'asOf'> = {
-  universeLimit: 200,
-  limit: 50,
+  universeLimit: 50,
+  limit: 25,
   minPrice: 1.5,
   maxPrice: 30,
   minAvgVol: 1_000_000,
@@ -169,6 +169,7 @@ export const SCANNERS = [
     description: 'Regular-session gainers with liquidity and price filters.',
     defaultRequest: {
       ...baseDefaults,
+      minChangePct: 0.0,
       minTodayVolume: 0,
     },
     defaultSort: { key: 'change_pct', direction: 'desc' },

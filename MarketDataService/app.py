@@ -228,6 +228,7 @@ def _fetch_scanner_universe(
             detail="yfinance error: screener payloads returned no quotes",
         )
 
+    min_change_ratio = min_change_pct / 100.0
     filtered: List[dict] = []
     for item in combined.values():
         ticker = item["ticker"]
@@ -262,7 +263,7 @@ def _fetch_scanner_universe(
             continue
 
         change_pct = item.get("changePct")
-        if change_pct is not None and change_pct < min_change_pct:
+        if change_pct is not None and change_pct < min_change_ratio:
             continue
 
         name = (item.get("shortName") or "").upper()
