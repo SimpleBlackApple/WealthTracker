@@ -20,6 +20,13 @@ HOD_APPROACH_DEFAULT_MAX_DIST_PCT = 2.0
 HOD_APPROACH_ADAPTIVE_CAP_PCT = 2.5
 VWAP_APPROACH_DEFAULT_MAX_DIST_PCT = 1.7
 VWAP_APPROACH_ADAPTIVE_CAP_PCT = 1.75
+try:
+    REL_VOL_TOD_DAYS = int(os.getenv("REL_VOL_TOD_DAYS", "10"))
+except ValueError:
+    REL_VOL_TOD_DAYS = 10
+REL_VOL_TOD_DAYS = max(REL_VOL_TOD_DAYS, 0)
+
+INTRADAY_MAX_DAYS_BY_INTERVAL = {"1m": 7}
 
 redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -49,7 +56,7 @@ def write_cache(key: str, payload: dict) -> None:
 
 
 ET_TZ = ZoneInfo("America/New_York")
-ALLOWED_EXCHANGES = {"NYQ", "NMS", "ASE"}  # NYSE, NASDAQ, AMEX
+ALLOWED_EXCHANGES = {"NYQ", "NMS", "NCM", "NGM", "ASE"}  # NYSE, NASDAQ, AMEX
 
 
 class HistoryBar(BaseModel):
@@ -183,11 +190,17 @@ def _fetch_scanner_universe(
         "small_cap_gainers",
     ]
 
+    screen_count = max(int(universe_limit or 0), 1)
     payloads: List[dict] = []
     errors: List[str] = []
     for screener in screeners:
         try:
-            payload = yf.screen(screener, count=max(universe_limit, 100))
+            payload = yf.screen(
+                screener,
+                count=screen_count,
+                sortField="percentchange",
+                sortAsc=False,
+            )
             if isinstance(payload, dict):
                 payloads.append(payload)
             else:
@@ -313,14 +326,34 @@ def _download_intraday(
     return frames
 
 
-def _df_to_et_latest_session(df: pd.DataFrame) -> pd.DataFrame:
+def _df_to_et(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
     if not isinstance(df.index, pd.DatetimeIndex):
         return df
     if df.index.tz is None:
         df = df.tz_localize("UTC")
-    df = df.tz_convert(ET_TZ)
+    return df.tz_convert(ET_TZ)
+
+
+def _intraday_max_days(interval: str) -> int:
+    return INTRADAY_MAX_DAYS_BY_INTERVAL.get(interval, 60)
+
+
+def _rel_vol_tod_period_days(lookback_days: int, interval: str) -> int:
+    if lookback_days <= 0:
+        return 0
+    buffer_days = max(5, int(lookback_days * 0.5))
+    period_days = lookback_days + buffer_days
+    return max(1, min(period_days, _intraday_max_days(interval)))
+
+
+def _df_to_et_latest_session(df: pd.DataFrame) -> pd.DataFrame:
+    df = _df_to_et(df)
+    if df is None or df.empty:
+        return df
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return df
     # yfinance "1d" can still return the previous trading day (e.g., early morning ET,
     # weekends/holidays). Use the most recent session date present in the data.
     session_date = df.index[-1].date()
@@ -335,6 +368,74 @@ def _between_time(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
         return df.between_time(start, end, inclusive="both")
     except TypeError:
         return df.between_time(start, end)
+
+
+def _compute_rel_vol_tod(df: pd.DataFrame, lookback_days: int) -> dict:
+    result = {
+        "relVolTod": None,
+        "todayCumVol": None,
+        "baselineCumVol": None,
+        "barIndex": None,
+        "barTime": None,
+    }
+    if df is None or df.empty or lookback_days <= 0:
+        return result
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return result
+
+    df = _df_to_et(df)
+    if df is None or df.empty:
+        return result
+
+    df_reg = _between_time(df, "09:30", "16:00")
+    if df_reg is None or df_reg.empty:
+        return result
+
+    df_reg = df_reg.sort_index()
+    grouped = {date: day_df for date, day_df in df_reg.groupby(df_reg.index.date) if not day_df.empty}
+    if not grouped:
+        return result
+
+    dates = sorted(grouped.keys())
+    today_date = dates[-1]
+    today_df = grouped.get(today_date)
+    if today_df is None or today_df.empty:
+        return result
+
+    last_ts = today_df.index[-1]
+    bar_time = last_ts.time()
+    today_cum_vol = float(today_df["Volume"].fillna(0).cumsum().iloc[-1])
+
+    baseline_vals: List[float] = []
+    for date in reversed(dates[:-1]):
+        if len(baseline_vals) >= lookback_days:
+            break
+        day_df = grouped.get(date)
+        if day_df is None or day_df.empty:
+            continue
+        day_slice = day_df.loc[day_df.index.time <= bar_time]
+        if day_slice.empty:
+            continue
+        day_cum_vol = float(day_slice["Volume"].fillna(0).cumsum().iloc[-1])
+        baseline_vals.append(day_cum_vol)
+
+    baseline_cum_vol = None
+    rel_vol_tod = None
+    if baseline_vals:
+        baseline_cum_vol = sum(baseline_vals) / len(baseline_vals)
+        if baseline_cum_vol > 0:
+            rel_vol_tod = today_cum_vol / baseline_cum_vol
+
+    result.update(
+        {
+            "relVolTod": rel_vol_tod,
+            "todayCumVol": int(today_cum_vol),
+            "baselineCumVol": baseline_cum_vol,
+            "barIndex": int(len(today_df) - 1),
+            "barTime": last_ts.strftime("%H:%M"),
+        }
+    )
+    return result
 
 
 def _last_close(df: pd.DataFrame) -> Optional[float]:
@@ -388,7 +489,7 @@ def _close_slope(df: pd.DataFrame, n: int) -> Optional[float]:
 
 
 class ScannerUniverseRequest(BaseModel):
-    universeLimit: int = 200
+    universeLimit: int = 50
     limit: int = 25
 
     minPrice: float = 1.5
@@ -419,8 +520,8 @@ class HodVwapMomentumRequest(ScannerUniverseRequest):
 
 
 class HodBreakoutsRequest(ScannerUniverseRequest):
-    minTodayVolume: int = 200_000
-    minRelVol: float = 1.7
+    minTodayVolume: int = 150_000
+    minRelVol: float = 1.4
     # Percent points (e.g. 1.0 == 1%).
     maxDistToHod: float = 1.0
 
@@ -428,6 +529,11 @@ class HodBreakoutsRequest(ScannerUniverseRequest):
 class VwapBreakoutsRequest(ScannerUniverseRequest):
     minTodayVolume: int = 200_000
     minRelVol: float = 1.7
+
+
+class VolumeSpikesRequest(ScannerUniverseRequest):
+    minTodayVolume: int = 200_000
+    minRelVol: float = 2.0
 
 
 class HodVwapApproachRequest(ScannerUniverseRequest):
@@ -480,6 +586,11 @@ class DayGainerRow(BaseModel):
     change_pct: Optional[float] = None
     volume: int = 0
     relative_volume: Optional[float] = None
+    relative_volume_tod: Optional[float] = None
+    today_cum_volume: Optional[int] = None
+    baseline_cum_volume: Optional[float] = None
+    bar_index: Optional[int] = None
+    bar_time: Optional[str] = None
     float_shares: Optional[float] = None
     market_cap: Optional[float] = None
 
@@ -492,6 +603,11 @@ class IntradayMomentumRow(BaseModel):
     last_bar_high: Optional[float] = None
     range_pct: Optional[float] = None
     relative_volume: Optional[float] = None
+    relative_volume_tod: Optional[float] = None
+    today_cum_volume: Optional[int] = None
+    baseline_cum_volume: Optional[float] = None
+    bar_index: Optional[int] = None
+    bar_time: Optional[str] = None
     price_change_pct: Optional[float] = None
     avg_volume_20d: Optional[float] = None
     vwap: Optional[float] = None
@@ -509,6 +625,11 @@ class HodVwapApproachRow(BaseModel):
     vwap_distance: Optional[float] = None
     range_pct: Optional[float] = None
     relative_volume: Optional[float] = None
+    relative_volume_tod: Optional[float] = None
+    today_cum_volume: Optional[int] = None
+    baseline_cum_volume: Optional[float] = None
+    bar_index: Optional[int] = None
+    bar_time: Optional[str] = None
 
 
 class DayGainersResponse(BaseModel):
@@ -554,7 +675,8 @@ def _features_cache_key(request: ScannerUniverseRequest) -> str:
         "md:scanner:features:"
         f"u={request.universeLimit}:minP={min_price}:maxP={max_price}:"
         f"minV={request.minAvgVol}:minChg={request.minChangePct}:"
-        f"int={interval}:per={period}:prepost={int(request.prepost)}:slopeN={request.closeSlopeN}"
+        f"int={interval}:per={period}:prepost={int(request.prepost)}:slopeN={request.closeSlopeN}:"
+        f"relTodDays={REL_VOL_TOD_DAYS}"
     )
 
 
@@ -585,6 +707,19 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
     meta = {x["ticker"]: x for x in universe_items if x.get("ticker")}
 
     frames = _download_intraday(tickers, interval=interval, period=period, prepost=bool(request.prepost))
+    rel_vol_tod_frames: dict[str, pd.DataFrame] = {}
+    if REL_VOL_TOD_DAYS > 0 and tickers:
+        rel_vol_tod_period_days = _rel_vol_tod_period_days(REL_VOL_TOD_DAYS, interval)
+        if rel_vol_tod_period_days > 0:
+            try:
+                rel_vol_tod_frames = _download_intraday(
+                    tickers,
+                    interval=interval,
+                    period=f"{rel_vol_tod_period_days}d",
+                    prepost=False,
+                )
+            except HTTPException:
+                rel_vol_tod_frames = {}
     features: List[dict] = []
 
     for ticker in tickers:
@@ -626,6 +761,8 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
         rel_vol = None
         if avg_daily_vol_f and avg_daily_vol_f > 0:
             rel_vol = reg_vol / avg_daily_vol_f
+
+        rel_vol_tod_fields = _compute_rel_vol_tod(rel_vol_tod_frames.get(ticker), REL_VOL_TOD_DAYS)
 
         hod = _safe_float(df_reg["High"].max()) if df_reg is not None and not df_reg.empty else None
         lod = _safe_float(df_reg["Low"].min()) if df_reg is not None and not df_reg.empty else None
@@ -689,6 +826,11 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
                 "posInRange": pos_in_range,
                 "distToHod": dist_to_hod,
                 "relVol": rel_vol,
+                "relVolTod": rel_vol_tod_fields.get("relVolTod"),
+                "todayCumVol": rel_vol_tod_fields.get("todayCumVol"),
+                "baselineCumVol": rel_vol_tod_fields.get("baselineCumVol"),
+                "barIndex": rel_vol_tod_fields.get("barIndex"),
+                "barTime": rel_vol_tod_fields.get("barTime"),
                 "closeSlopeN": close_slope_n,
                 "atr": atr_val,
                 "intradayVol": intraday_vol,
@@ -796,11 +938,13 @@ def _scan_cache_key(name: str, base_request: ScannerUniverseRequest, extra: str)
 
 def _day_gainers_cache_key(request: DayGainersRequest) -> str:
     min_price, max_price = _effective_price_bounds(request)
+    interval, period = _validate_intraday_request(request)
     return (
         "md:scanner:day_gainers:"
         f"u={request.universeLimit}:minP={min_price}:maxP={max_price}:"
         f"minV={request.minAvgVol}:minChg={request.minChangePct}:"
-        f"minTodayV={request.minTodayVolume}:limit={request.limit}"
+        f"int={interval}:per={period}:prepost={int(request.prepost)}:"
+        f"minTodayV={request.minTodayVolume}:limit={request.limit}:relTodDays={REL_VOL_TOD_DAYS}"
     )
 
 
@@ -812,42 +956,45 @@ def scan_day_gainers(request: DayGainersRequest) -> dict:
         return cached
 
     min_price, max_price = _effective_price_bounds(request)
-    universe_items = _load_universe_items(request)
+    min_change_ratio = float(request.minChangePct or 0.0) / 100.0
+    feature_payload = _get_features_cached(request)
     results: List[dict] = []
-    for item in universe_items:
-        symbol = item.get("ticker")
+    for f in feature_payload.get("features", []):
+        symbol = f.get("ticker")
         if not symbol:
             continue
 
-        price = _safe_float(item.get("last"))
+        price = _safe_float(f.get("price"))
         if price is None or not (min_price <= price <= max_price):
             continue
 
-        today_vol = _safe_int(item.get("volume")) or 0
+        prev_close = _safe_float(f.get("prevClose"))
+        if prev_close in (None, 0):
+            continue
+
+        today_vol = _safe_int(f.get("todayVolume")) or 0
         if today_vol < max(int(request.minTodayVolume or 0), 0):
             continue
 
-        change_pct = _safe_float(item.get("changePct"))
-        if change_pct is None:
-            prev_close = _safe_float(item.get("prevClose"))
-            if prev_close not in (None, 0) and price is not None:
-                change_pct = (price - prev_close) / prev_close
-
-        avg_daily_vol = _safe_float(item.get("avgDailyVol10d") or item.get("avgDailyVol3m"))
-        rel_vol = None
-        if avg_daily_vol not in (None, 0) and today_vol > 0:
-            rel_vol = today_vol / avg_daily_vol
+        change_ratio = (price - prev_close) / prev_close
+        if change_ratio < min_change_ratio:
+            continue
 
         results.append(
             {
                 "symbol": symbol,
                 "price": price,
-                "prev_close": _safe_float(item.get("prevClose")),
-                "change_pct": _to_pct_points(change_pct),
+                "prev_close": prev_close,
+                "change_pct": _to_pct_points(change_ratio),
                 "volume": today_vol,
-                "relative_volume": rel_vol,
-                "float_shares": _safe_float(item.get("floatShares")),
-                "market_cap": _safe_float(item.get("marketCap")),
+                "relative_volume": _safe_float(f.get("relVol")),
+                "relative_volume_tod": _safe_float(f.get("relVolTod")),
+                "today_cum_volume": _safe_int(f.get("todayCumVol")),
+                "baseline_cum_volume": _safe_float(f.get("baselineCumVol")),
+                "bar_index": _safe_int(f.get("barIndex")),
+                "bar_time": f.get("barTime"),
+                "float_shares": _safe_float(f.get("floatShares")),
+                "market_cap": _safe_float(f.get("marketCap")),
             }
         )
 
@@ -966,6 +1113,11 @@ def scan_hod_vwap_momentum(request: HodVwapMomentumRequest) -> dict:
                 "last_bar_high": last_reg_high,
                 "range_pct": _to_pct_points(range_pct),
                 "relative_volume": rel_vol,
+                "relative_volume_tod": _safe_float(f.get("relVolTod")),
+                "today_cum_volume": _safe_int(f.get("todayCumVol")),
+                "baseline_cum_volume": _safe_float(f.get("baselineCumVol")),
+                "bar_index": _safe_int(f.get("barIndex")),
+                "bar_time": f.get("barTime"),
                 "price_change_pct": _to_pct_points(price_change_ratio),
                 "avg_volume_20d": avg_volume_20d,
                 "vwap": vwap_val,
@@ -1071,6 +1223,79 @@ def scan_vwap_breakouts(request: VwapBreakoutsRequest) -> dict:
     return payload
 
 
+@app.post("/scan/volume-spikes", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
+def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
+    cache_key = _scan_cache_key(
+        "volume_spikes",
+        request,
+        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:limit={request.limit}",
+    )
+    cached = read_cache(cache_key)
+    if cached:
+        return cached
+
+    feature_payload = _get_features_cached(request)
+    min_price, max_price = _effective_price_bounds(request)
+    min_change_ratio = float(request.minChangePct or 0.0) / 100.0
+    results: List[dict] = []
+
+    for f in feature_payload.get("features", []):
+        symbol = f.get("ticker")
+        if not symbol:
+            continue
+
+        price = _safe_float(f.get("price"))
+        prev_close = _safe_float(f.get("prevClose"))
+        rel_vol = _safe_float(f.get("relVol"))
+        avg_volume_20d = _safe_float(f.get("avgVolume20d"))
+        range_pct = _safe_float(f.get("rangePct"))
+        today_vol = _safe_int(f.get("todayVolume")) or 0
+
+        if price is None or prev_close in (None, 0):
+            continue
+        if price < min_price or price > max_price:
+            continue
+        if today_vol < request.minTodayVolume:
+            continue
+        if rel_vol is None or rel_vol < request.minRelVol:
+            continue
+
+        price_change_ratio = (price - prev_close) / prev_close
+        if price_change_ratio < min_change_ratio:
+            continue
+
+        results.append(
+            {
+                "symbol": symbol,
+                "price": price,
+                "range_pct": _to_pct_points(range_pct),
+                "relative_volume": rel_vol,
+                "relative_volume_tod": _safe_float(f.get("relVolTod")),
+                "today_cum_volume": _safe_int(f.get("todayCumVol")),
+                "baseline_cum_volume": _safe_float(f.get("baselineCumVol")),
+                "bar_index": _safe_int(f.get("barIndex")),
+                "bar_time": f.get("barTime"),
+                "price_change_pct": _to_pct_points(price_change_ratio),
+                "avg_volume_20d": avg_volume_20d,
+            }
+        )
+
+    results.sort(
+        key=lambda x: (
+            x.get("relative_volume") or 0.0,
+            x.get("price_change_pct") or 0.0,
+        ),
+        reverse=True,
+    )
+    payload = {
+        "scanner": "volume_spikes",
+        "sorted_by": "relative_volume desc, price_change_pct desc",
+        "results": results[: request.limit],
+    }
+    write_cache(cache_key, payload)
+    return payload
+
+
 @app.post("/scan/hod-vwap-approach", response_model=HodVwapApproachResponse, include_in_schema=False)
 def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
     cache_key = _scan_cache_key(
@@ -1162,6 +1387,11 @@ def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
                 "vwap_distance": _to_pct_points(vwap_distance),
                 "range_pct": _to_pct_points(range_pct),
                 "relative_volume": rel_vol,
+                "relative_volume_tod": _safe_float(f.get("relVolTod")),
+                "today_cum_volume": _safe_int(f.get("todayCumVol")),
+                "baseline_cum_volume": _safe_float(f.get("baselineCumVol")),
+                "bar_index": _safe_int(f.get("barIndex")),
+                "bar_time": f.get("barTime"),
             }
         )
 

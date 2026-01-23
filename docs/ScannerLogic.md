@@ -2,6 +2,14 @@
 
 This document describes the behavior of each scanner endpoint exposed by `WealthTrackerServer`, backed by the Python `MarketDataService`.
 
+## Code Index (Critical Paths)
+
+- `MarketDataService/app.py`: Core scanner implementations, shared filters, and request/response models.
+- `WealthTrackerServer/Controllers/ScannerController.cs`: API endpoints and request normalization.
+- `WealthTrackerServer/Services/MarketDataClient.cs`: HTTP client wrapper that calls the Python service.
+- `WealthTrackerServer/OpenApi/ScannerExamplesOperationTransformer.cs`: OpenAPI request examples for scanner endpoints.
+- `docs/ScannerLogic.md`: Behavior documentation (this file).
+
 ## External References (Implementation Sources)
 
 The current implementation heavily relies on the `yfinance` library to fetch market data and screener results.
@@ -41,11 +49,12 @@ Inputs (selected)
 - `minChangePct`: minimum gain vs previous close (default `3.0`)
 - `minTodayVolume`: optional minimum current volume (default `0`)
 - `minPrice`/`maxPrice`: price bounds (min is clamped to `>= 1.5`, with an additional hard filter for `price > 1.5`)
+- `interval`/`period` (defaults `5m`/`1d`; use `5d` during weekends/holidays to reduce empty data)
 
 Computation
-- `price`: from Yahoo screener quote fields (`regularMarketPrice` best-effort)
-- `change_pct`: computed as `(price - prev_close) / prev_close * 100` when possible (percentage points)
-- `volume`: from Yahoo screener quote fields (`regularMarketVolume` best-effort)
+- `price`: last regular-session bar close (intraday bars)
+- `change_pct`: `(price - prev_close) / prev_close * 100` (percentage points)
+- `volume`: sum of regular-session intraday bars
 - `relative_volume`: `volume / avg_daily_volume` (best-effort; `avg_daily_volume` comes from 10d or 3m averages)
 
 Output fields
@@ -107,6 +116,31 @@ Output fields
 
 Sorting
 - `price_change_pct desc`, then `relative_volume desc`
+
+## Scanner: Volume Spikes (High-Volume Momentum)
+
+Endpoint
+- `POST /api/scanner/volume-spikes`
+
+Intent
+- Find stocks spiking `>= minChangePct` with very high relative volume, using regular-session data.
+
+Inputs (selected)
+- `minChangePct`: minimum gain vs previous close (default `3.0`)
+- `minRelVol`: minimum relative volume vs 10d/3m average (default `2.0`)
+- `minTodayVolume`: minimum regular-session volume (default `200,000`)
+- `interval`/`period` (defaults `5m`/`1d`; use `5d` during weekends/holidays to reduce empty data)
+
+Computation (regular session only)
+- Computes `price_change_pct` vs `prev_close` from intraday data
+- `relative_volume` computed as `today_volume / avg_daily_volume` (best-effort)
+
+Output fields
+- Always: `symbol`, `price`, `price_change_pct`, `relative_volume`
+- Best-effort extras (may be omitted): `range_pct`, `avg_volume_20d`
+
+Sorting
+- `relative_volume desc`, then `price_change_pct desc`
 
 ## Scanner: HOD Approach (Near-Breakout Setups)
 

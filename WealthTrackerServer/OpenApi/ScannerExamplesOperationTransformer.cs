@@ -24,7 +24,7 @@ public sealed class ScannerExamplesOperationTransformer : IOpenApiOperationTrans
         {
             SetExample(operation, new OpenApiObject
             {
-                ["universeLimit"] = new OpenApiInteger(200),
+                ["universeLimit"] = new OpenApiInteger(50),
                 ["limit"] = new OpenApiInteger(25),
                 ["minPrice"] = new OpenApiDouble(1.5),
                 ["maxPrice"] = new OpenApiDouble(30),
@@ -43,7 +43,7 @@ public sealed class ScannerExamplesOperationTransformer : IOpenApiOperationTrans
         {
             SetExample(operation, new OpenApiObject
             {
-                ["universeLimit"] = new OpenApiInteger(200),
+                ["universeLimit"] = new OpenApiInteger(50),
                 ["limit"] = new OpenApiInteger(25),
                 ["minPrice"] = new OpenApiDouble(1.5),
                 ["maxPrice"] = new OpenApiDouble(30),
@@ -53,8 +53,8 @@ public sealed class ScannerExamplesOperationTransformer : IOpenApiOperationTrans
                 ["period"] = new OpenApiString("1d"),
                 ["prepost"] = new OpenApiBoolean(false),
                 ["closeSlopeN"] = new OpenApiInteger(6),
-                ["minTodayVolume"] = new OpenApiInteger(200_000),
-                ["minRelVol"] = new OpenApiDouble(1.7),
+                ["minTodayVolume"] = new OpenApiInteger(150_000),
+                ["minRelVol"] = new OpenApiDouble(1.4),
                 ["maxDistToHod"] = new OpenApiDouble(1.0)
             });
             return Task.CompletedTask;
@@ -64,7 +64,7 @@ public sealed class ScannerExamplesOperationTransformer : IOpenApiOperationTrans
         {
             SetExample(operation, new OpenApiObject
             {
-                ["universeLimit"] = new OpenApiInteger(200),
+                ["universeLimit"] = new OpenApiInteger(50),
                 ["limit"] = new OpenApiInteger(25),
                 ["minPrice"] = new OpenApiDouble(1.5),
                 ["maxPrice"] = new OpenApiDouble(30),
@@ -80,11 +80,31 @@ public sealed class ScannerExamplesOperationTransformer : IOpenApiOperationTrans
             return Task.CompletedTask;
         }
 
+        if (string.Equals(path, "api/scanner/volume-spikes", StringComparison.OrdinalIgnoreCase))
+        {
+            SetExample(operation, new OpenApiObject
+            {
+                ["universeLimit"] = new OpenApiInteger(50),
+                ["limit"] = new OpenApiInteger(25),
+                ["minPrice"] = new OpenApiDouble(1.5),
+                ["maxPrice"] = new OpenApiDouble(30),
+                ["minAvgVol"] = new OpenApiInteger(1_000_000),
+                ["minChangePct"] = new OpenApiDouble(3.0),
+                ["interval"] = new OpenApiString("5m"),
+                ["period"] = new OpenApiString("1d"),
+                ["prepost"] = new OpenApiBoolean(false),
+                ["closeSlopeN"] = new OpenApiInteger(6),
+                ["minTodayVolume"] = new OpenApiInteger(200_000),
+                ["minRelVol"] = new OpenApiDouble(2.0)
+            });
+            return Task.CompletedTask;
+        }
+
         if (string.Equals(path, "api/scanner/hod-approach", StringComparison.OrdinalIgnoreCase))
         {
             SetExample(operation, new OpenApiObject
             {
-                ["universeLimit"] = new OpenApiInteger(200),
+                ["universeLimit"] = new OpenApiInteger(50),
                 ["limit"] = new OpenApiInteger(25),
                 ["minPrice"] = new OpenApiDouble(1.5),
                 ["maxPrice"] = new OpenApiDouble(30),
@@ -111,7 +131,7 @@ public sealed class ScannerExamplesOperationTransformer : IOpenApiOperationTrans
         {
             SetExample(operation, new OpenApiObject
             {
-                ["universeLimit"] = new OpenApiInteger(200),
+                ["universeLimit"] = new OpenApiInteger(50),
                 ["limit"] = new OpenApiInteger(25),
                 ["minPrice"] = new OpenApiDouble(1.5),
                 ["maxPrice"] = new OpenApiDouble(30),

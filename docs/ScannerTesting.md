@@ -66,6 +66,7 @@ Try `POST /api/scanner/day-gainers` with:
 Other scanner endpoints:
 - `POST /api/scanner/hod-breakouts`
 - `POST /api/scanner/vwap-breakouts`
+- `POST /api/scanner/volume-spikes`
 - `POST /api/scanner/hod-approach`
 - `POST /api/scanner/vwap-approach`
 
@@ -87,9 +88,10 @@ Note: `127.0.0.1` works from your host machine (e.g., redis-cli), but
 RedisInsight runs in a container, so it must connect via the Docker network.
 
 Then look for keys like:
-- `md:scanner:day_gainers:u=200:minP=1.5:maxP=30:minV=1000000:minChg=3:minTodayV=0:limit=25`
+- `md:scanner:day_gainers:u=200:minP=1.5:maxP=30:minV=1000000:minChg=3:int=5m:per=1d:prepost=0:minTodayV=0:limit=25`
 - `md:scanner:features:u=200:minP=1.5:maxP=30:minV=1000000:minChg=3:int=5m:per=1d:prepost=0:slopeN=6`
 - `md:scanner:hod_breakouts:...`
 - `md:scanner:vwap_breakouts:...`
+- `md:scanner:volume_spikes:...`
 - `md:scanner:hod_approach:...`
 - `md:scanner:vwap_approach:...`

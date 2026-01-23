@@ -27,6 +27,11 @@ public class MarketDataClient : IMarketDataClient
         CancellationToken cancellationToken) =>
         PostAsync<VwapBreakoutsRequest, HodVwapMomentumResponse>("scan/vwap-breakouts", request, cancellationToken);
 
+    public Task<HodVwapMomentumResponse> GetVolumeSpikesAsync(
+        VolumeSpikesRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<VolumeSpikesRequest, HodVwapMomentumResponse>("scan/volume-spikes", request, cancellationToken);
+
     public Task<HodVwapApproachResponse> GetHodApproachAsync(
         HodApproachRequest request,
         CancellationToken cancellationToken) =>

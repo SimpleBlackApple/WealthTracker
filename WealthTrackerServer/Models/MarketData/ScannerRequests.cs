@@ -5,7 +5,7 @@ namespace WealthTrackerServer.Models.MarketData;
 public class ScannerUniverseRequest
 {
     [Range(1, 500)]
-    public int UniverseLimit { get; set; } = 200;
+    public int UniverseLimit { get; set; } = 50;
 
     [Range(1, 200)]
     public int Limit { get; set; } = 25;
@@ -58,10 +58,10 @@ public class HodVwapMomentumRequest : ScannerUniverseRequest
 public class HodBreakoutsRequest : ScannerUniverseRequest
 {
     [Range(0, long.MaxValue)]
-    public long MinTodayVolume { get; set; } = 200_000;
+    public long MinTodayVolume { get; set; } = 150_000;
 
     [Range(0, 100)]
-    public double MinRelVol { get; set; } = 1.7;
+    public double MinRelVol { get; set; } = 1.4;
 
     // Percent points (e.g. 1.0 == 1%).
     [Range(0, 100)]
@@ -75,6 +75,15 @@ public class VwapBreakoutsRequest : ScannerUniverseRequest
 
     [Range(0, 100)]
     public double MinRelVol { get; set; } = 1.7;
+}
+
+public class VolumeSpikesRequest : ScannerUniverseRequest
+{
+    [Range(0, long.MaxValue)]
+    public long MinTodayVolume { get; set; } = 200_000;
+
+    [Range(0, 100)]
+    public double MinRelVol { get; set; } = 2.0;
 }
 
 public class HodVwapApproachRequest : ScannerUniverseRequest

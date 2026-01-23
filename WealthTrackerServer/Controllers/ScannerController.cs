@@ -75,6 +75,26 @@ public class ScannerController : ControllerBase
         }
     }
 
+    [HttpPost("volume-spikes")]
+    [ProducesResponseType(typeof(HodVwapMomentumResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<HodVwapMomentumResponse>> RunVolumeSpikes(
+        [FromBody] VolumeSpikesRequest request,
+        CancellationToken cancellationToken)
+    {
+        NormalizeScannerRequest(request);
+
+        try
+        {
+            var response = await _marketDataClient.GetVolumeSpikesAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (HttpRequestException ex)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
+        }
+    }
+
     [HttpPost("hod-approach")]
     [ProducesResponseType(typeof(HodVwapApproachResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
@@ -119,7 +139,7 @@ public class ScannerController : ControllerBase
     {
         if (request.UniverseLimit <= 0)
         {
-            request.UniverseLimit = 200;
+            request.UniverseLimit = 50;
         }
 
         if (request.Limit <= 0)
