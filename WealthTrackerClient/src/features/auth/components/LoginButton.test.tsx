@@ -1,12 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { LoginButton } from './LoginButton'
-import { useAuthStore } from '@/stores/authStore'
-
-// Mock the auth store
-vi.mock('@/stores/authStore', () => ({
-  useAuthStore: vi.fn(),
-}))
 
 // Mock window.location
 const mockLocation = { href: '' }
@@ -45,11 +40,6 @@ describe('LoginButton', () => {
   })
 
   it('should render the button', () => {
-    // Arrange
-    vi.mocked(useAuthStore).mockReturnValue(
-      {} as ReturnType<typeof useAuthStore>
-    )
-
     // Act
     render(<LoginButton />)
 
@@ -57,17 +47,41 @@ describe('LoginButton', () => {
     expect(screen.getByText('Sign in with Google')).toBeInTheDocument()
   })
 
-  it('should show loading state when clicked', () => {
-    // Arrange
-    vi.mocked(useAuthStore).mockReturnValue(
-      {} as ReturnType<typeof useAuthStore>
+  it('should redirect to Google OAuth with state', async () => {
+    const user = userEvent.setup()
+    render(<LoginButton />)
+    const button = screen.getByRole('button', { name: 'Sign in with Google' })
+
+    await user.click(button)
+
+    const authUrl = new URL(mockLocation.href)
+    const state = sessionStorage.getItem('oauth_state')
+
+    expect(authUrl.origin).toBe('https://accounts.google.com')
+    expect(authUrl.searchParams.get('client_id')).toBe('test_client_id')
+    expect(authUrl.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:5173/auth/callback'
+    )
+    expect(authUrl.searchParams.get('response_type')).toBe('code')
+    expect(authUrl.searchParams.get('scope')).toBe('openid email profile')
+    expect(authUrl.searchParams.get('state')).toBe(state)
+  })
+
+  it('should log error when client id is missing', async () => {
+    const user = userEvent.setup()
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', '')
+
+    render(<LoginButton />)
+    await user.click(
+      screen.getByRole('button', { name: 'Sign in with Google' })
     )
 
-    // Act
-    render(<LoginButton />)
-    const button = screen.getByText('Sign in with Google')
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Google Client ID is not configured'
+    )
+    expect(mockLocation.href).toBe('')
 
-    // Assert - button is not disabled initially
-    expect(button).not.toBeDisabled()
+    consoleSpy.mockRestore()
   })
 })

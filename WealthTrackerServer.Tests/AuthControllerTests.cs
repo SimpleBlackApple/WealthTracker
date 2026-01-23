@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Mvc.Testing;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
-using System.Net.Http.Json;
-using System.Text.Json;
+using WealthTrackerServer.Controllers;
 using WealthTrackerServer.Models;
 using WealthTrackerServer.Services;
 
@@ -14,154 +16,286 @@ public class AuthControllerTests
   [Fact]
   public async Task GoogleCallback_NewUser_CreatesUserAndReturnsTokens()
   {
-    // Arrange - Create mock GoogleAuthService
-    var mockGoogleAuthService = new Mock<IGoogleAuthService>();
-    var googleUserCode = "test_auth_code_12345";
-    var googleUserRedirectUri = "http://localhost:5173/auth/callback";
+    var context = CreateDbContext();
+    var jwtService = new Mock<IJwtService>();
+    var googleAuthService = new Mock<IGoogleAuthService>();
 
-    mockGoogleAuthService
-      .Setup(x => x.ExchangeCodeForTokensAsync(googleUserCode, googleUserRedirectUri))
-      .ReturnsAsync(new GoogleTokenResponse(
-        "google_access_token",
-        "dummy_id_token",
-        "google_refresh_token",
-        3600
-      ));
+    googleAuthService
+      .Setup(x => x.ExchangeCodeForTokensAsync("code-123", "http://localhost/callback"))
+      .ReturnsAsync(new GoogleTokenResponse("access", "id-token", "google-refresh", 3600));
+    googleAuthService
+      .Setup(x => x.ValidateAndGetUserInfoAsync("id-token"))
+      .ReturnsAsync(new GoogleUserInfo("google-id", "test@example.com", "Test User", null));
 
-    mockGoogleAuthService
-      .Setup(x => x.ValidateAndGetUserInfoAsync(It.IsAny<string>()))
-      .ReturnsAsync(new GoogleUserInfo("google_id_123", "test@example.com", "Test User", null));
+    jwtService.Setup(x => x.GenerateRefreshToken()).Returns("refresh-token");
+    jwtService.Setup(x => x.HashRefreshToken("refresh-token")).Returns("refresh-hash");
+    jwtService.Setup(x => x.GenerateAccessToken(It.IsAny<User>())).Returns("access-token");
 
-    // Act - Verify the mock works correctly
-    var result = await mockGoogleAuthService.Object.ExchangeCodeForTokensAsync(googleUserCode, googleUserRedirectUri);
+    var controller = CreateController(context, jwtService, googleAuthService);
 
-    // Assert
-    Assert.NotNull(result);
-    Assert.Equal("google_access_token", result.AccessToken);
-    Assert.Equal("dummy_id_token", result.IdToken);
-    Assert.Equal("google_refresh_token", result.RefreshToken);
-    Assert.Equal(3600, result.ExpiresIn);
+    var result = await controller.GoogleCallback(
+      new GoogleCallbackRequest("code-123", "http://localhost/callback"));
 
-    // Verify the mock was called
-    mockGoogleAuthService.Verify(x => x.ExchangeCodeForTokensAsync(googleUserCode, googleUserRedirectUri), Times.Once);
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var payload = Assert.IsType<LoginResponse>(ok.Value);
+    Assert.Equal("access-token", payload.AccessToken);
+    Assert.Equal("refresh-token", payload.RefreshToken);
+    Assert.Equal("test@example.com", payload.User.Email);
+
+    var user = await context.Users.SingleAsync();
+    Assert.Equal("google-id", user.GoogleId);
+    Assert.Equal("refresh-hash", user.RefreshTokenHash);
+    Assert.NotNull(user.RefreshTokenExpiry);
+    Assert.Null(user.LastLoginAt);
   }
 
   [Fact]
-  public void GoogleAuthService_GenerateAccessToken_ReturnsCorrectToken()
+  public async Task GoogleCallback_ExistingUser_UpdatesLoginAndRefreshToken()
   {
-    // Arrange - Create mock IJwtService
-    var mockJwtService = new Mock<IJwtService>();
-    var testUser = new User
+    var context = CreateDbContext();
+    var existingUser = new User
     {
-      Id = 1,
-      Name = "Test User",
-      Email = "test@example.com"
+      Name = "Existing User",
+      Email = "existing@example.com",
+      GoogleId = "old-google-id",
+      CreatedAt = DateTime.UtcNow.AddDays(-5)
     };
+    context.Users.Add(existingUser);
+    await context.SaveChangesAsync();
 
-    mockJwtService
-      .Setup(x => x.GenerateAccessToken(testUser))
-      .Returns("test_jwt_token");
+    var jwtService = new Mock<IJwtService>();
+    var googleAuthService = new Mock<IGoogleAuthService>();
+    googleAuthService
+      .Setup(x => x.ExchangeCodeForTokensAsync("code-456", "http://localhost/callback"))
+      .ReturnsAsync(new GoogleTokenResponse("access", "id-token", "google-refresh", 3600));
+    googleAuthService
+      .Setup(x => x.ValidateAndGetUserInfoAsync("id-token"))
+      .ReturnsAsync(new GoogleUserInfo("new-google-id", existingUser.Email, "Existing User", null));
 
-    // Act
-    var token = mockJwtService.Object.GenerateAccessToken(testUser);
+    jwtService.Setup(x => x.GenerateRefreshToken()).Returns("refresh-token");
+    jwtService.Setup(x => x.HashRefreshToken("refresh-token")).Returns("refresh-hash");
+    jwtService.Setup(x => x.GenerateAccessToken(It.IsAny<User>())).Returns("access-token");
 
-    // Assert
-    Assert.Equal("test_jwt_token", token);
-    mockJwtService.Verify(x => x.GenerateAccessToken(testUser), Times.Once);
+    var controller = CreateController(context, jwtService, googleAuthService);
+
+    var result = await controller.GoogleCallback(
+      new GoogleCallbackRequest("code-456", "http://localhost/callback"));
+
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var payload = Assert.IsType<LoginResponse>(ok.Value);
+    Assert.Equal("access-token", payload.AccessToken);
+    Assert.Equal(existingUser.Email, payload.User.Email);
+
+    var updatedUser = await context.Users.SingleAsync();
+    Assert.Equal("new-google-id", updatedUser.GoogleId);
+    Assert.NotNull(updatedUser.LastLoginAt);
+    Assert.Equal("refresh-hash", updatedUser.RefreshTokenHash);
   }
 
   [Fact]
-  public async Task GoogleCallback_ExistingUser_UpdatesUserAndReturnsTokens()
+  public async Task RefreshToken_InvalidToken_ReturnsUnauthorized()
   {
-    // Arrange - Create mock GoogleAuthService
-    var mockGoogleAuthService = new Mock<IGoogleAuthService>();
-    var existingUserEmail = "existing@example.com";
-    var googleUserCode = "test_auth_code_67890";
-    var googleUserRedirectUri = "http://localhost:5173/auth/callback";
+    var context = CreateDbContext();
+    context.Users.Add(new User
+    {
+      Name = "Test User",
+      Email = "test@example.com",
+      RefreshTokenHash = "stored-hash",
+      RefreshTokenExpiry = DateTime.UtcNow.AddDays(1),
+      CreatedAt = DateTime.UtcNow.AddDays(-2)
+    });
+    await context.SaveChangesAsync();
 
-    mockGoogleAuthService
-      .Setup(x => x.ExchangeCodeForTokensAsync(googleUserCode, googleUserRedirectUri))
-      .ReturnsAsync(new GoogleTokenResponse(
-        "google_access_token",
-        "dummy_id_token",
-        "google_refresh_token",
-        3600
-      ));
-
-    mockGoogleAuthService
-      .Setup(x => x.ValidateAndGetUserInfoAsync(It.IsAny<string>()))
-      .ReturnsAsync(new GoogleUserInfo("google_id_456", existingUserEmail, "Existing User", null));
-
-    // Act - Simulate the behavior of finding an existing user
-    var userInfo = await mockGoogleAuthService.Object.ValidateAndGetUserInfoAsync("dummy_id_token");
-
-    // Assert - Verify we get the correct user info back
-    Assert.NotNull(userInfo);
-    Assert.Equal("google_id_456", userInfo.Id);
-    Assert.Equal(existingUserEmail, userInfo.Email);
-    Assert.Equal("Existing User", userInfo.Name);
-
-    // Verify the mock was called
-    mockGoogleAuthService.Verify(x => x.ValidateAndGetUserInfoAsync("dummy_id_token"), Times.Once);
-  }
-
-  [Fact]
-  public void JwtService_VerifyRefreshToken_ValidToken_ReturnsTrue()
-  {
-    // Arrange
-    var mockJwtService = new Mock<IJwtService>();
-    var testRefreshToken = "test_refresh_token";
-    var testHash = "hashed_test_refresh_token";
-
-    mockJwtService
-      .Setup(x => x.VerifyRefreshToken(testRefreshToken, testHash))
-      .Returns(true);
-
-    // Act
-    var result = mockJwtService.Object.VerifyRefreshToken(testRefreshToken, testHash);
-
-    // Assert
-    Assert.True(result);
-    mockJwtService.Verify(x => x.VerifyRefreshToken(testRefreshToken, testHash), Times.Once);
-  }
-
-  [Fact]
-  public void JwtService_VerifyRefreshToken_InvalidToken_ReturnsFalse()
-  {
-    // Arrange
-    var mockJwtService = new Mock<IJwtService>();
-    var invalidRefreshToken = "invalid_token";
-    var testHash = "hashed_test_refresh_token";
-
-    mockJwtService
-      .Setup(x => x.VerifyRefreshToken(invalidRefreshToken, testHash))
+    var jwtService = new Mock<IJwtService>();
+    var googleAuthService = new Mock<IGoogleAuthService>();
+    jwtService
+      .Setup(x => x.VerifyRefreshToken("bad-token", "stored-hash"))
       .Returns(false);
 
-    // Act
-    var result = mockJwtService.Object.VerifyRefreshToken(invalidRefreshToken, testHash);
+    var controller = CreateController(context, jwtService, googleAuthService);
 
-    // Assert
-    Assert.False(result);
-    mockJwtService.Verify(x => x.VerifyRefreshToken(invalidRefreshToken, testHash), Times.Once);
+    var result = await controller.RefreshToken(new RefreshTokenRequest("bad-token"));
+
+    var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
   }
 
   [Fact]
-  public void JwtService_GenerateRefreshToken_ReturnsNonEmptyToken()
+  public async Task RefreshToken_ExpiredToken_ClearsStoredToken()
   {
-    // Arrange
-    var mockJwtService = new Mock<IJwtService>();
-    var expectedToken = "new_refresh_token_12345";
+    var context = CreateDbContext();
+    var user = new User
+    {
+      Name = "Expired User",
+      Email = "expired@example.com",
+      RefreshTokenHash = "stored-hash",
+      RefreshTokenExpiry = DateTime.UtcNow.AddMinutes(-5),
+      CreatedAt = DateTime.UtcNow.AddDays(-1)
+    };
+    context.Users.Add(user);
+    await context.SaveChangesAsync();
 
-    mockJwtService
-      .Setup(x => x.GenerateRefreshToken())
-      .Returns(expectedToken);
+    var jwtService = new Mock<IJwtService>();
+    var googleAuthService = new Mock<IGoogleAuthService>();
+    jwtService
+      .Setup(x => x.VerifyRefreshToken("expired-token", "stored-hash"))
+      .Returns(true);
 
-    // Act
-    var token = mockJwtService.Object.GenerateRefreshToken();
+    var controller = CreateController(context, jwtService, googleAuthService);
 
-    // Assert
-    Assert.Equal(expectedToken, token);
-    Assert.NotEmpty(token);
-    mockJwtService.Verify(x => x.GenerateRefreshToken(), Times.Once);
+    var result = await controller.RefreshToken(new RefreshTokenRequest("expired-token"));
+
+    var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    Assert.Equal(StatusCodes.Status401Unauthorized, unauthorized.StatusCode);
+
+    var updatedUser = await context.Users.SingleAsync();
+    Assert.Null(updatedUser.RefreshTokenHash);
+    Assert.Null(updatedUser.RefreshTokenExpiry);
+  }
+
+  [Fact]
+  public async Task RefreshToken_ValidToken_ReturnsAccessTokenAndRotatesRefresh()
+  {
+    var context = CreateDbContext();
+    var user = new User
+    {
+      Name = "Valid User",
+      Email = "valid@example.com",
+      RefreshTokenHash = "stored-hash",
+      RefreshTokenExpiry = DateTime.UtcNow.AddDays(1),
+      CreatedAt = DateTime.UtcNow.AddDays(-1)
+    };
+    context.Users.Add(user);
+    await context.SaveChangesAsync();
+
+    var jwtService = new Mock<IJwtService>();
+    var googleAuthService = new Mock<IGoogleAuthService>();
+    jwtService
+      .Setup(x => x.VerifyRefreshToken("refresh-token", "stored-hash"))
+      .Returns(true);
+    jwtService.Setup(x => x.GenerateRefreshToken()).Returns("new-refresh");
+    jwtService.Setup(x => x.HashRefreshToken("new-refresh")).Returns("new-hash");
+    jwtService.Setup(x => x.GenerateAccessToken(It.IsAny<User>())).Returns("access-token");
+
+    var controller = CreateController(context, jwtService, googleAuthService);
+
+    var result = await controller.RefreshToken(new RefreshTokenRequest("refresh-token"));
+
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var payload = Assert.IsType<RefreshTokenResponse>(ok.Value);
+    Assert.Equal("access-token", payload.AccessToken);
+
+    var updatedUser = await context.Users.SingleAsync();
+    Assert.Equal("new-hash", updatedUser.RefreshTokenHash);
+    Assert.NotNull(updatedUser.RefreshTokenExpiry);
+    Assert.True(updatedUser.RefreshTokenExpiry > DateTime.UtcNow);
+  }
+
+  [Fact]
+  public async Task Logout_InvalidClaim_ReturnsBadRequest()
+  {
+    var context = CreateDbContext();
+    var controller = CreateController(context, new Mock<IJwtService>(), new Mock<IGoogleAuthService>());
+    controller.ControllerContext = new ControllerContext
+    {
+      HttpContext = new DefaultHttpContext
+      {
+        User = new ClaimsPrincipal(new ClaimsIdentity())
+      }
+    };
+
+    var result = await controller.Logout(new LogoutRequest("token"));
+
+    var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+    Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+  }
+
+  [Fact]
+  public async Task Logout_ClearsRefreshToken()
+  {
+    var context = CreateDbContext();
+    var user = new User
+    {
+      Name = "Logout User",
+      Email = "logout@example.com",
+      RefreshTokenHash = "hash",
+      RefreshTokenExpiry = DateTime.UtcNow.AddDays(1),
+      CreatedAt = DateTime.UtcNow
+    };
+    context.Users.Add(user);
+    await context.SaveChangesAsync();
+
+    var controller = CreateController(context, new Mock<IJwtService>(), new Mock<IGoogleAuthService>());
+    controller.ControllerContext = new ControllerContext
+    {
+      HttpContext = new DefaultHttpContext
+      {
+        User = new ClaimsPrincipal(new ClaimsIdentity(
+          new[] { new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()) },
+          "test"))
+      }
+    };
+
+    var result = await controller.Logout(new LogoutRequest("token"));
+
+    var ok = Assert.IsType<OkObjectResult>(result);
+    Assert.Equal(StatusCodes.Status200OK, ok.StatusCode);
+
+    var updatedUser = await context.Users.SingleAsync();
+    Assert.Null(updatedUser.RefreshTokenHash);
+    Assert.Null(updatedUser.RefreshTokenExpiry);
+  }
+
+  [Fact]
+  public void GetMe_ReturnsClaims()
+  {
+    var context = CreateDbContext();
+    var controller = CreateController(context, new Mock<IJwtService>(), new Mock<IGoogleAuthService>());
+    controller.ControllerContext = new ControllerContext
+    {
+      HttpContext = new DefaultHttpContext
+      {
+        User = new ClaimsPrincipal(new ClaimsIdentity(
+          new[]
+          {
+            new Claim(ClaimTypes.NameIdentifier, "12"),
+            new Claim(ClaimTypes.Email, "me@example.com"),
+            new Claim(ClaimTypes.Name, "Tester")
+          },
+          "test"))
+      }
+    };
+
+    var result = controller.GetMe();
+
+    var ok = Assert.IsType<OkObjectResult>(result.Result);
+    var payload = Assert.IsType<MeResponse>(ok.Value);
+    Assert.Equal(12, payload.Id);
+    Assert.Equal("me@example.com", payload.Email);
+    Assert.Equal("Tester", payload.Name);
+  }
+
+  private static ApplicationDbContext CreateDbContext()
+  {
+    var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+      .UseInMemoryDatabase(Guid.NewGuid().ToString())
+      .Options;
+    return new ApplicationDbContext(options);
+  }
+
+  private static AuthController CreateController(
+    ApplicationDbContext context,
+    Mock<IJwtService> jwtService,
+    Mock<IGoogleAuthService> googleAuthService,
+    IDictionary<string, string?>? settings = null)
+  {
+    var config = new ConfigurationBuilder()
+      .AddInMemoryCollection(settings ?? new Dictionary<string, string?>
+      {
+        { "Authentication:Jwt:RefreshTokenExpirationDays", "7" }
+      })
+      .Build();
+    var logger = new Mock<ILogger<AuthController>>();
+    return new AuthController(context, jwtService.Object, googleAuthService.Object, config, logger.Object);
   }
 }

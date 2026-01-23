@@ -4,6 +4,7 @@ This project uses TDD (Test-Driven Development) methodology with the following t
 
 - **Backend**: xUnit + Moq + EF Core InMemory
 - **Frontend**: Vitest + React Testing Library
+- **Market Data Service**: Python `unittest`
 - **E2E**: Playwright (optional)
 
 ## Running Tests
@@ -39,29 +40,53 @@ pnpm test
 pnpm test:ui
 ```
 
+### Market Data Service Tests (Python)
+
+```bash
+cd MarketDataService
+python -m unittest discover -s tests
+```
+
 ## Test Structure
 
 ### Backend Tests
 
 ```
 WealthTrackerServer.Tests/
-└── AuthControllerTests.cs       # Auth endpoint tests
+  AuthControllerTests.cs               # Auth endpoint tests
+  MarketDataClientTests.cs             # Market data client tests
+  ScannerControllerTests.cs            # Scanner controller unit tests
+  ScannerControllerIntegrationTests.cs # Scanner controller integration tests
+  UserControllerTests.cs               # User controller tests
 ```
 
 ### Frontend Tests
 
 ```
 WealthTrackerClient/src/
-├── stores/
-│   └── authStore.test.ts        # Zustand store tests
-├── features/auth/
-│   ├── services/
-│   │   └── authService.test.ts  # API service tests
-│   ├── components/
-│   │   ├── LoginButton.test.tsx
-│   │   └── LogoutButton.test.tsx
-│   └── hooks/
-│       └── useAuthGuard.test.ts
+  stores/
+    authStore.test.ts                  # Zustand store tests
+  features/auth/
+    services/
+      authService.test.ts              # API service tests
+    components/
+      AuthCallback.test.tsx
+      LoginButton.test.tsx
+      LogoutButton.test.tsx
+    hooks/
+      useAuthGuard.test.ts
+  features/scanners/
+    pages/
+      ScannersPage.test.tsx
+    services/
+      scannerService.test.ts
+```
+
+### Market Data Service Tests
+
+```
+MarketDataService/tests/
+  test_app.py
 ```
 
 ## Windows-Specific Notes
@@ -89,8 +114,9 @@ taskkill /F /IM WealthTrackerServer.exe
 ## Test Coverage
 
 Current test counts:
-- Backend: 6 tests (xUnit)
-- Frontend: 16 tests (Vitest)
-- Total: 22 tests
+- Backend: 19 tests (xUnit)
+- Frontend: 25 tests (Vitest)
+- Market Data Service: 9 tests (unittest)
+- Total: 53 tests
 
 All tests should pass before committing changes.
