@@ -1,13 +1,25 @@
 import { useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  RefreshCw,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -15,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
 import {
   Table,
   TableBody,
@@ -25,6 +36,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { ActiveFilters } from '@/features/scanners/components/ActiveFilters'
+import { FilterChip } from '@/features/scanners/components/FilterChip'
+import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
+import { TableSkeleton } from '@/features/scanners/components/TableSkeleton'
 import { scannerService } from '@/features/scanners/services/scannerService'
 import {
   SCANNERS,
@@ -49,11 +64,6 @@ function formatPrice(value: number | null | undefined) {
     currency: 'USD',
     maximumFractionDigits: value >= 10 ? 2 : 4,
   })
-}
-
-function formatPctPoints(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) return '-'
-  return `${value.toFixed(2)}%`
 }
 
 function formatCompact(value: number | null | undefined) {
@@ -117,7 +127,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   )
 
   const filteredRows = useMemo(() => {
-    const q = symbolFilter.trim().toUpperCase()
+    const q = String(symbolFilter || '')
+      .trim()
+      .toUpperCase()
     if (!q) return rows
     return rows.filter(r =>
       String(r.symbol ?? '')
@@ -172,7 +184,15 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   }
 
   const renderCell = (key: string, value: unknown) => {
-    if (key === 'symbol') return String(value ?? '-')
+    if (key === 'symbol') {
+      const symbol = String(value ?? '-')
+      return (
+        <div className="flex items-center gap-2">
+          <StockSymbolBadge symbol={symbol} />
+          <span className="font-semibold">{symbol}</span>
+        </div>
+      )
+    }
 
     if (key === 'price' || key === 'prev_close' || key === 'day_high') {
       return formatPrice(value as number | null | undefined)
@@ -183,7 +203,22 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
       key === 'vwap_distance' ||
       key === 'distance_to_hod'
     ) {
-      return formatPctPoints(value as number | null | undefined)
+      const numValue = value as number | null | undefined
+      if (
+        numValue === null ||
+        numValue === undefined ||
+        Number.isNaN(numValue)
+      ) {
+        return '-'
+      }
+      const colorClass =
+        numValue > 0 ? 'text-gain' : numValue < 0 ? 'text-loss' : ''
+      return (
+        <span className={colorClass}>
+          {numValue > 0 ? '+' : ''}
+          {numValue.toFixed(2)}%
+        </span>
+      )
     }
 
     if (
@@ -204,550 +239,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     return String(value)
   }
 
-  const extraFilters = (() => {
-    switch (definition.id) {
-      case 'day-gainers': {
-        const request = draftRequest as ScannerRequestById['day-gainers']
-        return (
-          <div className="grid gap-2">
-            <Label htmlFor="minTodayVolume">Min today volume</Label>
-            <Input
-              id="minTodayVolume"
-              type="number"
-              min={0}
-              step={10000}
-              value={String(request.minTodayVolume)}
-              onChange={e =>
-                setDraftRequest(prev => ({
-                  ...prev,
-                  minTodayVolume: coerceInt(
-                    e.target.value,
-                    (prev as ScannerRequestById['day-gainers']).minTodayVolume
-                  ),
-                }))
-              }
-            />
-          </div>
-        )
-      }
-      case 'hod-breakouts':
-        return (
-          <>
-            <div className="grid gap-2">
-              <Label htmlFor="minTodayVolume">Min today volume</Label>
-              <Input
-                id="minTodayVolume"
-                type="number"
-                min={0}
-                step={10000}
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-breakouts'])
-                    .minTodayVolume
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minTodayVolume: coerceInt(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-breakouts'])
-                        .minTodayVolume
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minRelVol">Min rel vol</Label>
-              <Input
-                id="minRelVol"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-breakouts'])
-                    .minRelVol
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minRelVol: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-breakouts']).minRelVol
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxDistToHod">Max dist to HOD %</Label>
-              <Input
-                id="maxDistToHod"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-breakouts'])
-                    .maxDistToHod
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxDistToHod: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-breakouts']).maxDistToHod
-                    ),
-                  }))
-                }
-              />
-            </div>
-          </>
-        )
-      case 'vwap-breakouts':
-      case 'volume-spikes':
-        return (
-          <>
-            <div className="grid gap-2">
-              <Label htmlFor="minTodayVolume">Min today volume</Label>
-              <Input
-                id="minTodayVolume"
-                type="number"
-                min={0}
-                step={10000}
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-breakouts'])
-                    .minTodayVolume
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minTodayVolume: coerceInt(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-breakouts'])
-                        .minTodayVolume
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minRelVol">Min rel vol</Label>
-              <Input
-                id="minRelVol"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-breakouts'])
-                    .minRelVol
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minRelVol: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-breakouts']).minRelVol
-                    ),
-                  }))
-                }
-              />
-            </div>
-          </>
-        )
-      case 'hod-approach':
-        return (
-          <>
-            <div className="grid gap-2">
-              <Label htmlFor="minSetupPrice">Min setup price</Label>
-              <Input
-                id="minSetupPrice"
-                type="number"
-                step="0.01"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .minSetupPrice
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minSetupPrice: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).minSetupPrice
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxSetupPrice">Max setup price</Label>
-              <Input
-                id="maxSetupPrice"
-                type="number"
-                step="0.01"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .maxSetupPrice
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxSetupPrice: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).maxSetupPrice
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minTodayVolume">Min today volume</Label>
-              <Input
-                id="minTodayVolume"
-                type="number"
-                min={0}
-                step={10000}
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .minTodayVolume
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minTodayVolume: coerceInt(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach'])
-                        .minTodayVolume
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minRangePct">Min range %</Label>
-              <Input
-                id="minRangePct"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .minRangePct
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minRangePct: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).minRangePct
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minPosInRange">Min pos in range</Label>
-              <Input
-                id="minPosInRange"
-                type="number"
-                step="0.01"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .minPosInRange
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minPosInRange: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).minPosInRange
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxPosInRange">Max pos in range</Label>
-              <Input
-                id="maxPosInRange"
-                type="number"
-                step="0.001"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .maxPosInRange
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxPosInRange: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).maxPosInRange
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxDistToHod">Max dist to HOD %</Label>
-              <Input
-                id="maxDistToHod"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .maxDistToHod
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxDistToHod: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).maxDistToHod
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minRelVol">Min rel vol</Label>
-              <Input
-                id="minRelVol"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['hod-approach']).minRelVol
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minRelVol: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['hod-approach']).minRelVol
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-6">
-              <Checkbox
-                id="adaptiveThresholds"
-                checked={Boolean(
-                  (draftRequest as ScannerRequestById['hod-approach'])
-                    .adaptiveThresholds
-                )}
-                onCheckedChange={checked =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    adaptiveThresholds: Boolean(checked),
-                  }))
-                }
-              />
-              <Label htmlFor="adaptiveThresholds" className="text-sm">
-                Adaptive thresholds
-              </Label>
-            </div>
-          </>
-        )
-      case 'vwap-approach':
-        return (
-          <>
-            <div className="grid gap-2">
-              <Label htmlFor="minSetupPrice">Min setup price</Label>
-              <Input
-                id="minSetupPrice"
-                type="number"
-                step="0.01"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .minSetupPrice
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minSetupPrice: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach'])
-                        .minSetupPrice
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxSetupPrice">Max setup price</Label>
-              <Input
-                id="maxSetupPrice"
-                type="number"
-                step="0.01"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .maxSetupPrice
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxSetupPrice: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach'])
-                        .maxSetupPrice
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minTodayVolume">Min today volume</Label>
-              <Input
-                id="minTodayVolume"
-                type="number"
-                min={0}
-                step={10000}
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .minTodayVolume
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minTodayVolume: coerceInt(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach'])
-                        .minTodayVolume
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minRangePct">Min range %</Label>
-              <Input
-                id="minRangePct"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .minRangePct
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minRangePct: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach']).minRangePct
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minPosInRange">Min pos in range</Label>
-              <Input
-                id="minPosInRange"
-                type="number"
-                step="0.01"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .minPosInRange
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minPosInRange: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach'])
-                        .minPosInRange
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxPosInRange">Max pos in range</Label>
-              <Input
-                id="maxPosInRange"
-                type="number"
-                step="0.001"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .maxPosInRange
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxPosInRange: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach'])
-                        .maxPosInRange
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="maxAbsVwapDistance">Max abs VWAP dist %</Label>
-              <Input
-                id="maxAbsVwapDistance"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .maxAbsVwapDistance
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    maxAbsVwapDistance: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach'])
-                        .maxAbsVwapDistance
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="minRelVol">Min rel vol</Label>
-              <Input
-                id="minRelVol"
-                type="number"
-                step="0.1"
-                value={String(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .minRelVol
-                )}
-                onChange={e =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    minRelVol: coerceNumber(
-                      e.target.value,
-                      (prev as ScannerRequestById['vwap-approach']).minRelVol
-                    ),
-                  }))
-                }
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-6">
-              <Checkbox
-                id="adaptiveThresholds"
-                checked={Boolean(
-                  (draftRequest as ScannerRequestById['vwap-approach'])
-                    .adaptiveThresholds
-                )}
-                onCheckedChange={checked =>
-                  setDraftRequest(prev => ({
-                    ...prev,
-                    adaptiveThresholds: Boolean(checked),
-                  }))
-                }
-              />
-              <Label htmlFor="adaptiveThresholds" className="text-sm">
-                Adaptive thresholds
-              </Label>
-            </div>
-          </>
-        )
-      default:
-        return null
-    }
-  })()
-
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
-      <Card className="h-fit lg:sticky lg:top-[72px]">
+      <Card className="h-fit shadow-sm lg:sticky lg:top-[72px]">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Scanners</CardTitle>
         </CardHeader>
@@ -818,226 +312,361 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
           </div>
         </div>
 
-        <Card>
+        <div className="relative flex items-center group">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute -left-4 z-10 hidden group-hover:flex h-8 w-8 rounded-full border bg-background shadow-sm lg:-left-5"
+            onClick={() => {
+              const el = document.getElementById('filter-scroll-container')
+              if (el) el.scrollBy({ left: -200, behavior: 'smooth' })
+            }}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          <div
+            id="filter-scroll-container"
+            className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide no-scrollbar"
+            style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+          >
+            <div className="flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FilterChip
+                    label="Universe"
+                    value={draftRequest.universeLimit}
+                    defaultValue={definition.defaultRequest.universeLimit}
+                    onClick={() => {}}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="universeLimit" className="text-xs">
+                      Universe limit
+                    </Label>
+                    <Input
+                      id="universeLimit"
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={String(draftRequest.universeLimit)}
+                      onChange={e =>
+                        setDraftRequest(prev => ({
+                          ...prev,
+                          universeLimit: coerceInt(
+                            e.target.value,
+                            prev.universeLimit
+                          ),
+                        }))
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FilterChip
+                    label="Limit"
+                    value={draftRequest.limit}
+                    defaultValue={definition.defaultRequest.limit}
+                    onClick={() => {}}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="limit" className="text-xs">
+                      Result limit
+                    </Label>
+                    <Input
+                      id="limit"
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={String(draftRequest.limit)}
+                      onChange={e =>
+                        setDraftRequest(prev => ({
+                          ...prev,
+                          limit: coerceInt(e.target.value, prev.limit),
+                        }))
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FilterChip
+                    label="Price"
+                    value={`${draftRequest.minPrice}-${draftRequest.maxPrice}`}
+                    defaultValue={`${definition.defaultRequest.minPrice}-${definition.defaultRequest.maxPrice}`}
+                    onClick={() => {}}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-3">
+                  <div className="grid gap-3">
+                    <div className="grid gap-1">
+                      <Label htmlFor="minPrice" className="text-xs">
+                        Min price
+                      </Label>
+                      <Input
+                        id="minPrice"
+                        type="number"
+                        step="0.01"
+                        value={String(draftRequest.minPrice)}
+                        onChange={e =>
+                          setDraftRequest(prev => ({
+                            ...prev,
+                            minPrice: coerceNumber(
+                              e.target.value,
+                              prev.minPrice
+                            ),
+                          }))
+                        }
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor="maxPrice" className="text-xs">
+                        Max price
+                      </Label>
+                      <Input
+                        id="maxPrice"
+                        type="number"
+                        step="0.01"
+                        value={String(draftRequest.maxPrice)}
+                        onChange={e =>
+                          setDraftRequest(prev => ({
+                            ...prev,
+                            maxPrice: coerceNumber(
+                              e.target.value,
+                              prev.maxPrice
+                            ),
+                          }))
+                        }
+                        className="h-8"
+                      />
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FilterChip
+                    label="Avg Vol"
+                    value={formatCompact(draftRequest.minAvgVol)}
+                    defaultValue={formatCompact(
+                      definition.defaultRequest.minAvgVol
+                    )}
+                    onClick={() => {}}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="minAvgVol" className="text-xs">
+                      Min avg vol
+                    </Label>
+                    <Input
+                      id="minAvgVol"
+                      type="number"
+                      min={0}
+                      step={10000}
+                      value={String(draftRequest.minAvgVol)}
+                      onChange={e =>
+                        setDraftRequest(prev => ({
+                          ...prev,
+                          minAvgVol: coerceInt(e.target.value, prev.minAvgVol),
+                        }))
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FilterChip
+                    label="Change %"
+                    value={`${draftRequest.minChangePct}%`}
+                    defaultValue={`${definition.defaultRequest.minChangePct}%`}
+                    onClick={() => {}}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="minChangePct" className="text-xs">
+                      Min change %
+                    </Label>
+                    <Input
+                      id="minChangePct"
+                      type="number"
+                      step="0.1"
+                      value={String(draftRequest.minChangePct)}
+                      onChange={e =>
+                        setDraftRequest(prev => ({
+                          ...prev,
+                          minChangePct: coerceNumber(
+                            e.target.value,
+                            prev.minChangePct
+                          ),
+                        }))
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FilterChip
+                    label="Interval"
+                    value={draftRequest.interval}
+                    defaultValue={definition.defaultRequest.interval}
+                    onClick={() => {}}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-3">
+                  <div className="grid gap-2">
+                    <Label className="text-xs">Interval</Label>
+                    <Select
+                      value={draftRequest.interval}
+                      onValueChange={value =>
+                        setDraftRequest(prev => ({
+                          ...prev,
+                          interval: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1m">1m</SelectItem>
+                        <SelectItem value="2m">2m</SelectItem>
+                        <SelectItem value="5m">5m</SelectItem>
+                        <SelectItem value="15m">15m</SelectItem>
+                        <SelectItem value="30m">30m</SelectItem>
+                        <SelectItem value="60m">60m</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {definition.id === 'day-gainers' && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FilterChip
+                      label="Volume"
+                      value={formatCompact(
+                        (draftRequest as ScannerRequestById['day-gainers'])
+                          .minTodayVolume
+                      )}
+                      defaultValue={formatCompact(
+                        (
+                          definition.defaultRequest as ScannerRequestById['day-gainers']
+                        ).minTodayVolume
+                      )}
+                      onClick={() => {}}
+                    />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="minTodayVolume" className="text-xs">
+                        Min today volume
+                      </Label>
+                      <Input
+                        id="minTodayVolume"
+                        type="number"
+                        min={0}
+                        step={10000}
+                        value={String(
+                          (draftRequest as ScannerRequestById['day-gainers'])
+                            .minTodayVolume
+                        )}
+                        onChange={e =>
+                          setDraftRequest(prev => ({
+                            ...prev,
+                            minTodayVolume: coerceInt(
+                              e.target.value,
+                              (prev as ScannerRequestById['day-gainers'])
+                                .minTodayVolume
+                            ),
+                          }))
+                        }
+                        className="h-8"
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute -right-4 z-10 hidden group-hover:flex h-8 w-8 rounded-full border bg-background shadow-sm lg:-right-5"
+            onClick={() => {
+              const el = document.getElementById('filter-scroll-container')
+              if (el) el.scrollBy({ left: 200, behavior: 'smooth' })
+            }}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+
+          <div className="ml-4 h-8 w-[px] bg-border" />
+
+          <div className="ml-4 flex items-center gap-2 whitespace-nowrap">
+            <Label
+              htmlFor="symbolFilter"
+              className="text-xs font-semibold text-muted-foreground"
+            >
+              SYMBOL
+            </Label>
+            <Input
+              id="symbolFilter"
+              placeholder="Filter list..."
+              value={symbolFilter}
+              onChange={e => {
+                setPageIndex(0)
+                setSymbolFilter(e.target.value)
+              }}
+              className="h-9 w-40 bg-muted/50 focus:bg-background"
+            />
+          </div>
+        </div>
+
+        <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="text-base">Filters</CardTitle>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="symbolFilter" className="text-xs">
-                  Symbol
-                </Label>
-                <Input
-                  id="symbolFilter"
-                  placeholder="AAPL"
-                  value={symbolFilter}
-                  onChange={e => {
-                    setPageIndex(0)
-                    setSymbolFilter(e.target.value)
-                  }}
-                  className="h-8 w-40"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="universeLimit">Universe limit</Label>
-                  <Input
-                    id="universeLimit"
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={String(draftRequest.universeLimit)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        universeLimit: coerceInt(
-                          e.target.value,
-                          prev.universeLimit
-                        ),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="limit">Result limit</Label>
-                  <Input
-                    id="limit"
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={String(draftRequest.limit)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        limit: coerceInt(e.target.value, prev.limit),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="minPrice">Min price</Label>
-                  <Input
-                    id="minPrice"
-                    type="number"
-                    step="0.01"
-                    value={String(draftRequest.minPrice)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        minPrice: coerceNumber(e.target.value, prev.minPrice),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="maxPrice">Max price</Label>
-                  <Input
-                    id="maxPrice"
-                    type="number"
-                    step="0.01"
-                    value={String(draftRequest.maxPrice)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        maxPrice: coerceNumber(e.target.value, prev.maxPrice),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="minAvgVol">Min avg vol</Label>
-                  <Input
-                    id="minAvgVol"
-                    type="number"
-                    min={0}
-                    step={10000}
-                    value={String(draftRequest.minAvgVol)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        minAvgVol: coerceInt(e.target.value, prev.minAvgVol),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="minChangePct">Min change %</Label>
-                  <Input
-                    id="minChangePct"
-                    type="number"
-                    step="0.1"
-                    value={String(draftRequest.minChangePct)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        minChangePct: coerceNumber(
-                          e.target.value,
-                          prev.minChangePct
-                        ),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Interval</Label>
-                  <Select
-                    value={draftRequest.interval}
-                    onValueChange={value =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        interval: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select interval" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1m">1m</SelectItem>
-                      <SelectItem value="2m">2m</SelectItem>
-                      <SelectItem value="5m">5m</SelectItem>
-                      <SelectItem value="15m">15m</SelectItem>
-                      <SelectItem value="30m">30m</SelectItem>
-                      <SelectItem value="60m">60m</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Period</Label>
-                  <Select
-                    value={draftRequest.period}
-                    onValueChange={value =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        period: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1d">1d</SelectItem>
-                      <SelectItem value="5d">5d</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <Checkbox
-                    id="prepost"
-                    checked={draftRequest.prepost}
-                    onCheckedChange={checked =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        prepost: Boolean(checked),
-                      }))
-                    }
-                  />
-                  <Label htmlFor="prepost" className="text-sm">
-                    Include pre/post
-                  </Label>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="closeSlopeN">Close slope N</Label>
-                  <Input
-                    id="closeSlopeN"
-                    type="number"
-                    min={2}
-                    max={30}
-                    value={String(draftRequest.closeSlopeN)}
-                    onChange={e =>
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        closeSlopeN: coerceInt(
-                          e.target.value,
-                          prev.closeSlopeN
-                        ),
-                      }))
-                    }
-                  />
-                </div>
-                {extraFilters}
-              </div>
-              <Separator />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">
-                  Applied limit: {appliedRequest.limit} | Universe:{' '}
-                  {appliedRequest.universeLimit} | Sorted by:{' '}
-                  {query.data?.sorted_by || '-'}
-                </div>
+              <CardTitle className="text-base">Results</CardTitle>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {query.dataUpdatedAt > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {new Date(query.dataUpdatedAt).toLocaleTimeString()}
+                  </span>
+                )}
                 <div className="flex items-center gap-2">
-                  <Label className="text-xs">Rows / page</Label>
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Rows / page
+                  </Label>
                   <Select
                     value={String(pageSize)}
                     onValueChange={value => {
                       setPageIndex(0)
-                      setPageSize(coerceInt(value, pageSize))
+                      setPageSize(Number(value))
                     }}
                   >
-                    <SelectTrigger className="h-8 w-[110px]">
+                    <SelectTrigger className="h-7 w-[70px] text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1048,107 +677,175 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="text-base">Results</CardTitle>
-              <div className="text-xs text-muted-foreground">
-                {query.isFetching
-                  ? 'Loading...'
-                  : query.isError
-                    ? 'Error'
-                    : `${totalRows.toLocaleString()} rows`}
+                <span>
+                  {query.isFetching
+                    ? 'Loading...'
+                    : query.isError
+                      ? 'Error'
+                      : `${totalRows.toLocaleString()} rows`}
+                </span>
               </div>
             </div>
           </CardHeader>
           <CardContent>
+            <ActiveFilters
+              filters={[
+                {
+                  key: 'minPrice',
+                  label: 'Min Price',
+                  value: appliedRequest.minPrice,
+                  defaultValue: definition.defaultRequest.minPrice,
+                },
+                {
+                  key: 'maxPrice',
+                  label: 'Max Price',
+                  value: appliedRequest.maxPrice,
+                  defaultValue: definition.defaultRequest.maxPrice,
+                },
+                {
+                  key: 'minAvgVol',
+                  label: 'Min Avg Vol',
+                  value: appliedRequest.minAvgVol,
+                  defaultValue: definition.defaultRequest.minAvgVol,
+                },
+                {
+                  key: 'minChangePct',
+                  label: 'Min Change %',
+                  value: appliedRequest.minChangePct,
+                  defaultValue: definition.defaultRequest.minChangePct,
+                },
+                {
+                  key: 'universeLimit',
+                  label: 'Universe',
+                  value: appliedRequest.universeLimit,
+                  defaultValue: definition.defaultRequest.universeLimit,
+                },
+                {
+                  key: 'limit',
+                  label: 'Limit',
+                  value: appliedRequest.limit,
+                  defaultValue: definition.defaultRequest.limit,
+                },
+              ]}
+              onRemove={key => {
+                setDraftRequest(prev => ({
+                  ...prev,
+                  [key]:
+                    definition.defaultRequest[
+                      key as keyof typeof definition.defaultRequest
+                    ],
+                }))
+                setAppliedRequest(prev => ({
+                  ...prev,
+                  [key]:
+                    definition.defaultRequest[
+                      key as keyof typeof definition.defaultRequest
+                    ],
+                }))
+              }}
+            />
             {query.isError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
                 {query.error instanceof Error
                   ? query.error.message
                   : 'Failed to load scanner results.'}
               </div>
+            ) : query.isFetching && pageRows.length === 0 ? (
+              <TableSkeleton
+                columns={definition.columns.length + 1}
+                rows={10}
+              />
             ) : (
               <div className="grid gap-3">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {definition.columns.map(col => {
-                        const active = sort.key === col.key
-                        const Icon = !active
-                          ? ArrowUpDown
-                          : sort.direction === 'asc'
-                            ? ArrowUp
-                            : ArrowDown
-                        return (
-                          <TableHead
-                            key={col.key}
-                            className={cn(
-                              'whitespace-nowrap',
-                              col.align === 'right' && 'text-right'
-                            )}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => toggleSort(col.key)}
+                <div className="max-h-[600px] overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
+                          #
+                        </TableHead>
+                        {definition.columns.map(col => {
+                          const active = sort.key === col.key
+                          const Icon = !active
+                            ? ArrowUpDown
+                            : sort.direction === 'asc'
+                              ? ArrowUp
+                              : ArrowDown
+                          return (
+                            <TableHead
+                              key={col.key}
                               className={cn(
-                                'inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground',
-                                active && 'text-foreground'
+                                'whitespace-nowrap',
+                                col.align === 'right' && 'text-right',
+                                col.key === 'symbol' && 'border-r border-border'
                               )}
                             >
-                              {col.header}
-                              <Icon className="h-3.5 w-3.5 opacity-70" />
-                            </button>
-                          </TableHead>
-                        )
-                      })}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pageRows.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={definition.columns.length}
-                          className="py-10 text-center text-sm text-muted-foreground"
-                        >
-                          {query.isFetching
-                            ? 'Loading...'
-                            : 'No results. Try increasing universe limit or using period 5d outside market hours.'}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      pageRows.map((row, idx) => (
-                        <TableRow key={`${String(row.symbol)}-${idx}`}>
-                          {definition.columns.map(col => {
-                            const value = col.getValue(row as never)
-                            return (
-                              <TableCell
-                                key={col.key}
+                              <button
+                                type="button"
+                                onClick={() => toggleSort(col.key)}
                                 className={cn(
-                                  'whitespace-nowrap',
-                                  col.align === 'right' &&
-                                    'text-right font-variant-numeric tabular-nums'
+                                  'inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground',
+                                  active && 'text-foreground'
                                 )}
                               >
-                                {renderCell(col.key, value)}
-                              </TableCell>
-                            )
-                          })}
+                                {col.header}
+                                <Icon className="h-3.5 w-3.5 opacity-70" />
+                              </button>
+                            </TableHead>
+                          )
+                        })}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pageRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={definition.columns.length + 1}
+                            className="py-10 text-center text-sm text-muted-foreground"
+                          >
+                            {query.isFetching
+                              ? 'Loading...'
+                              : 'No results. Try increasing universe limit or using period 5d outside market hours.'}
+                          </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : (
+                        pageRows.map((row, idx) => (
+                          <TableRow
+                            key={`${String(row.symbol)}-${idx}`}
+                            className="hover:bg-muted/50 transition-colors"
+                          >
+                            <TableCell className="w-12 text-center text-xs text-muted-foreground">
+                              {currentPageIndex * pageSize + idx + 1}
+                            </TableCell>
+                            {definition.columns.map(col => {
+                              const value = col.getValue(row as never)
+                              return (
+                                <TableCell
+                                  key={col.key}
+                                  className={cn(
+                                    'whitespace-nowrap',
+                                    col.align === 'right' &&
+                                      'text-right font-variant-numeric tabular-nums',
+                                    col.key === 'symbol' &&
+                                      'border-r border-border'
+                                  )}
+                                >
+                                  {renderCell(col.key, value)}
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-xs text-muted-foreground">
-                    Page {currentPageIndex + 1} of {totalPages} |{' '}
-                    {totalRows.toLocaleString()} rows
+                    {currentPageIndex * pageSize + 1}-
+                    {Math.min((currentPageIndex + 1) * pageSize, totalRows)} of{' '}
+                    {totalRows.toLocaleString()}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button

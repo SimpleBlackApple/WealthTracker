@@ -77,8 +77,9 @@ describe('ScannersPage', () => {
     await waitFor(() => {
       const rows = screen.getAllByRole('row')
       const dataRows = rows.slice(1)
-      const firstRow = within(dataRows[0]).getAllByRole('cell')[0]
-      expect(firstRow).toHaveTextContent('BBB')
+      // Symbol is in the second cell (index 1) due to the row number column
+      const firstRowSymbolCell = within(dataRows[0]).getAllByRole('cell')[1]
+      expect(firstRowSymbolCell).toHaveTextContent('BBB')
     })
   })
 })
