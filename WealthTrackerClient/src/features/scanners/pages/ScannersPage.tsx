@@ -337,7 +337,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     label="Universe"
                     value={draftRequest.universeLimit}
                     defaultValue={definition.defaultRequest.universeLimit}
-                    onClick={() => {}}
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-40 p-3">
@@ -372,7 +371,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     label="Limit"
                     value={draftRequest.limit}
                     defaultValue={definition.defaultRequest.limit}
-                    onClick={() => {}}
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-40 p-3">
@@ -404,7 +402,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     label="Price"
                     value={`${draftRequest.minPrice}-${draftRequest.maxPrice}`}
                     defaultValue={`${definition.defaultRequest.minPrice}-${definition.defaultRequest.maxPrice}`}
-                    onClick={() => {}}
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-56 p-3">
@@ -463,7 +460,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     defaultValue={formatCompact(
                       definition.defaultRequest.minAvgVol
                     )}
-                    onClick={() => {}}
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-48 p-3">
@@ -495,7 +491,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     label="Change %"
                     value={`${draftRequest.minChangePct}%`}
                     defaultValue={`${definition.defaultRequest.minChangePct}%`}
-                    onClick={() => {}}
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-40 p-3">
@@ -529,7 +524,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     label="Interval"
                     value={draftRequest.interval}
                     defaultValue={definition.defaultRequest.interval}
-                    onClick={() => {}}
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-40 p-3">
@@ -574,7 +568,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                           definition.defaultRequest as ScannerRequestById['day-gainers']
                         ).minTodayVolume
                       )}
-                      onClick={() => {}}
                     />
                   </PopoverTrigger>
                   <PopoverContent className="w-48 p-3">
