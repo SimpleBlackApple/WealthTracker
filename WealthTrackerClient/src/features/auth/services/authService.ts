@@ -4,7 +4,7 @@ import type {
   RefreshRequest,
   RefreshResponse,
 } from '../types/auth'
-import type { AxiosInstance } from 'axios'
+import type { AxiosInstance, AxiosRequestConfig } from 'axios'
 import axios from 'axios'
 
 const API_BASE =
@@ -12,8 +12,15 @@ const API_BASE =
 
 class AuthService {
   private axiosInstance: AxiosInstance
+  private authInstance: AxiosInstance
 
   constructor() {
+    this.authInstance = axios.create({
+      baseURL: API_BASE,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
     this.axiosInstance = this.createAxiosInstance()
   }
 
@@ -41,9 +48,22 @@ class AuthService {
     instance.interceptors.response.use(
       response => response,
       async error => {
-        const originalRequest = error.config
+        const originalRequest = error.config as AxiosRequestConfig & {
+          _retry?: boolean
+          skipAuthRefresh?: boolean
+        }
 
         if (error.response?.status === 401 && !originalRequest._retry) {
+          const requestUrl = originalRequest.url ?? ''
+          if (
+            originalRequest.skipAuthRefresh ||
+            requestUrl.includes('/auth/refresh')
+          ) {
+            this.clearAuthStorage()
+            this.redirectToLogin()
+            return Promise.reject(error)
+          }
+
           originalRequest._retry = true
 
           try {
@@ -57,11 +77,12 @@ class AuthService {
               originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
               return instance(originalRequest)
             }
+
+            this.clearAuthStorage()
+            this.redirectToLogin()
           } catch (refreshError) {
-            localStorage.removeItem('accessToken')
-            localStorage.removeItem('refreshToken')
-            localStorage.removeItem('user')
-            window.location.href = '/login'
+            this.clearAuthStorage()
+            this.redirectToLogin()
             return Promise.reject(refreshError)
           }
         }
@@ -78,7 +99,7 @@ class AuthService {
     redirectUri: string
   ): Promise<AuthResponse> {
     const request: LoginRequest = { code, redirectUri }
-    const response = await this.axiosInstance.post<AuthResponse>(
+    const response = await this.authInstance.post<AuthResponse>(
       '/auth/google/callback',
       request
     )
@@ -87,18 +108,30 @@ class AuthService {
 
   async refreshToken(refreshToken: string) {
     const request: RefreshRequest = { refreshToken }
-    return await this.axiosInstance.post<RefreshResponse>(
+    return await this.authInstance.post<RefreshResponse>(
       '/auth/refresh',
       request
     )
   }
 
   async logout(refreshToken: string): Promise<void> {
-    await this.axiosInstance.post('/auth/logout', { refreshToken })
+    await this.authInstance.post('/auth/logout', { refreshToken })
   }
 
   getAxiosInstance(): AxiosInstance {
     return this.axiosInstance
+  }
+
+  private clearAuthStorage() {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem('user')
+  }
+
+  private redirectToLogin() {
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login'
+    }
   }
 }
 

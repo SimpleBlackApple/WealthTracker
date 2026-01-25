@@ -25,7 +25,7 @@ describe('authService', () => {
   describe('loginWithGoogle', () => {
     it('should call the correct endpoint with correct payload', async () => {
       // Arrange
-      const mockAxiosInstance = {
+      const mockAuthInstance = {
         post: vi.fn().mockResolvedValue({
           data: {
             accessToken: 'test_access_token',
@@ -33,15 +33,18 @@ describe('authService', () => {
             user: { id: 1, name: 'Test User', email: 'test@example.com' },
           },
         }),
+      }
+      const mockApiInstance = {
+        post: vi.fn(),
         interceptors: {
           request: { use: vi.fn() },
           response: { use: vi.fn() },
         },
       }
 
-      vi.mocked(axios.create).mockReturnValue(
-        mockAxiosInstance as unknown as AxiosInstance
-      )
+      vi.mocked(axios.create)
+        .mockReturnValueOnce(mockAuthInstance as unknown as AxiosInstance)
+        .mockReturnValueOnce(mockApiInstance as unknown as AxiosInstance)
 
       // Create a new instance to get the mocked one
       const testService =
@@ -54,7 +57,7 @@ describe('authService', () => {
       )
 
       // Assert
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      expect(mockAuthInstance.post).toHaveBeenCalledWith(
         '/auth/google/callback',
         {
           code: 'test_code',
@@ -72,19 +75,22 @@ describe('authService', () => {
   describe('refreshToken', () => {
     it('should call the correct endpoint with refresh token', async () => {
       // Arrange
-      const mockAxiosInstance = {
+      const mockAuthInstance = {
         post: vi.fn().mockResolvedValue({
           data: { accessToken: 'new_access_token' },
         }),
+      }
+      const mockApiInstance = {
+        post: vi.fn(),
         interceptors: {
           request: { use: vi.fn() },
           response: { use: vi.fn() },
         },
       }
 
-      vi.mocked(axios.create).mockReturnValue(
-        mockAxiosInstance as unknown as AxiosInstance
-      )
+      vi.mocked(axios.create)
+        .mockReturnValueOnce(mockAuthInstance as unknown as AxiosInstance)
+        .mockReturnValueOnce(mockApiInstance as unknown as AxiosInstance)
       const testService =
         new (authService.constructor as new () => typeof authService)()
 
@@ -92,7 +98,7 @@ describe('authService', () => {
       const result = await testService.refreshToken('test_refresh_token')
 
       // Assert
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/refresh', {
+      expect(mockAuthInstance.post).toHaveBeenCalledWith('/auth/refresh', {
         refreshToken: 'test_refresh_token',
       })
       expect(result.data).toEqual({ accessToken: 'new_access_token' })
@@ -102,17 +108,20 @@ describe('authService', () => {
   describe('logout', () => {
     it('should call the correct endpoint with refresh token', async () => {
       // Arrange
-      const mockAxiosInstance = {
+      const mockAuthInstance = {
         post: vi.fn().mockResolvedValue({}),
+      }
+      const mockApiInstance = {
+        post: vi.fn(),
         interceptors: {
           request: { use: vi.fn() },
           response: { use: vi.fn() },
         },
       }
 
-      vi.mocked(axios.create).mockReturnValue(
-        mockAxiosInstance as unknown as AxiosInstance
-      )
+      vi.mocked(axios.create)
+        .mockReturnValueOnce(mockAuthInstance as unknown as AxiosInstance)
+        .mockReturnValueOnce(mockApiInstance as unknown as AxiosInstance)
       const testService =
         new (authService.constructor as new () => typeof authService)()
 
@@ -120,7 +129,7 @@ describe('authService', () => {
       await testService.logout('test_refresh_token')
 
       // Assert
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/logout', {
+      expect(mockAuthInstance.post).toHaveBeenCalledWith('/auth/logout', {
         refreshToken: 'test_refresh_token',
       })
     })
@@ -129,7 +138,10 @@ describe('authService', () => {
   describe('getAxiosInstance', () => {
     it('should return the axios instance', () => {
       // Arrange
-      const mockAxiosInstance = {
+      const mockAuthInstance = {
+        post: vi.fn(),
+      }
+      const mockApiInstance = {
         post: vi.fn(),
         interceptors: {
           request: { use: vi.fn() },
@@ -137,9 +149,9 @@ describe('authService', () => {
         },
       }
 
-      vi.mocked(axios.create).mockReturnValue(
-        mockAxiosInstance as unknown as AxiosInstance
-      )
+      vi.mocked(axios.create)
+        .mockReturnValueOnce(mockAuthInstance as unknown as AxiosInstance)
+        .mockReturnValueOnce(mockApiInstance as unknown as AxiosInstance)
       const testService =
         new (authService.constructor as new () => typeof authService)()
 
@@ -147,7 +159,7 @@ describe('authService', () => {
       const instance = testService.getAxiosInstance()
 
       // Assert
-      expect(instance).toBe(mockAxiosInstance)
+      expect(instance).toBe(mockApiInstance)
     })
   })
 })

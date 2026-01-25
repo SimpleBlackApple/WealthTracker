@@ -72,7 +72,7 @@ describe('ScannersPage', () => {
 
     await screen.findByText('AAA')
 
-    await user.click(screen.getByRole('button', { name: /Price/i }))
+    await user.click(screen.getByRole('button', { name: /sort by price/i }))
 
     await waitFor(() => {
       const rows = screen.getAllByRole('row')

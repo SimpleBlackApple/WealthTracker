@@ -24,9 +24,11 @@ export function ActiveFilters({ filters, onRemove }: ActiveFiltersProps) {
         <Badge
           key={filter.key}
           variant="secondary"
-          className="gap-1 pr-1 text-xs font-normal"
+          className="gap-1.5 border border-border/60 bg-card/70 pr-1 text-xs font-medium shadow-sm"
         >
-          <span className="text-muted-foreground">{filter.label}:</span>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            {filter.label}
+          </span>
           <span className="font-medium">
             {typeof filter.value === 'boolean'
               ? filter.value
@@ -37,7 +39,7 @@ export function ActiveFilters({ filters, onRemove }: ActiveFiltersProps) {
           <button
             type="button"
             onClick={() => onRemove(filter.key)}
-            className="ml-1 rounded-sm p-0.5 hover:bg-muted"
+            className="ml-1 rounded-full p-0.5 hover:bg-muted/60"
           >
             <X className="h-3 w-3" />
           </button>

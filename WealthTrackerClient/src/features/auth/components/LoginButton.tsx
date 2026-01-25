@@ -47,7 +47,7 @@ export function LoginButton() {
   }
 
   return (
-    <Button onClick={handleLogin} disabled={isLoading}>
+    <Button onClick={handleLogin} disabled={isLoading} className="w-full">
       {isLoading ? 'Connecting...' : 'Sign in with Google'}
     </Button>
   )

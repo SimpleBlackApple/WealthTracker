@@ -23,6 +23,10 @@ CLAUDE.md
 *Plan.md
 !docs/ScannerPlan.md
 !docs/ScannerImrovePlan.md
+findings.md
+progress.md
+task_plan.md
+archive/
 
 # temp directories
 tmpclaude-*-cwd

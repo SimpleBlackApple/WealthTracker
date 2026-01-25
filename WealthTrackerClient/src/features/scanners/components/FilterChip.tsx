@@ -21,15 +21,15 @@ export const FilterChip = forwardRef<HTMLButtonElement, Props>(
         type="button"
         {...props}
         className={cn(
-          'flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
           isModified
-            ? 'border-primary bg-primary/5 text-primary'
-            : 'border-border bg-background text-muted-foreground hover:bg-muted',
-          active && 'bg-muted ring-1 ring-primary'
+            ? 'border-primary/40 bg-primary/10 text-primary shadow-sm'
+            : 'border-border/60 bg-card/70 text-muted-foreground hover:border-primary/30 hover:text-foreground',
+          active && 'ring-1 ring-primary/40 shadow-md'
         )}
       >
         <span>{label}</span>
-        <span className="h-3 w-[1px] bg-border mx-0.5" />
+        <span className="mx-0.5 h-3 w-[1px] bg-border/60" />
         <span
           className={cn(
             'font-semibold',
