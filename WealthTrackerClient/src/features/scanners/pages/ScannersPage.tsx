@@ -895,7 +895,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                             {pageRows.length === 0 ? (
+                            {pageRows.length === 0 ? (
                               <TableRow>
                                 <TableCell
                                   colSpan={definition.columns.length + 1}

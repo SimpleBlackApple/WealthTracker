@@ -70,23 +70,20 @@ const THEME_COLORS = {
   light: {
     up: '#10b981', // Emerald 500 (Matches --gain)
     down: '#ef4444', // Red 500 (Matches --loss)
-    bg: '#ffffff', // Card background (approx)
+    bg: '#ffffff', // Fallback
     toolbar: '#f1f3f6',
     border: '#e5e7eb',
   },
   dark: {
     up: '#34d399', // Emerald 400 (Matches --gain in dark mode)
     down: '#f87171', // Red 400 (Matches --loss in dark mode)
-    bg: '#1e1e2e', // Dark card background (approx)
+    bg: '#1e1e2e', // Fallback
     toolbar: '#1e1e2e',
     border: '#374151',
   },
 }
 
-export function TradingViewChart({
-  symbol,
-  exchange,
-}: TradingViewChartProps) {
+export function TradingViewChart({ symbol, exchange }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -139,7 +136,8 @@ export function TradingViewChart({
             'volume.volume.color.0': colors.down,
             'volume.volume.color.1': colors.up,
             // Pane background
-            'paneProperties.background': colors.bg,
+            'paneProperties.background': isDark ? '#1e1e2e' : '#fafafa', // Use slightly off-white for light mode
+            'paneProperties.backgroundType': 'solid',
             'paneProperties.vertGridProperties.color': isDark
               ? '#2B2B43'
               : '#E6E6E6',
