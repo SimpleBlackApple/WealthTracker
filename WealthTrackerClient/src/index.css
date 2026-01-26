@@ -8,7 +8,8 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
-  --font-display: 'Rajdhani', 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-display:
+    'Rajdhani', 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
   --radius: 0.625rem;
   --background: oklch(0.98 0.01 250);
   --foreground: oklch(0.18 0.02 250);
@@ -46,7 +47,8 @@
   --surface-1: oklch(0.99 0.01 250);
   --surface-2: oklch(0.96 0.02 250);
   --surface-3: oklch(0.93 0.03 250);
-  --app-gradient: radial-gradient(
+  --app-gradient:
+    radial-gradient(
       1200px 600px at 10% -10%,
       oklch(0.95 0.06 195 / 35%),
       transparent 65%
@@ -56,16 +58,9 @@
       oklch(0.95 0.08 80 / 30%),
       transparent 70%
     );
-  --app-grid: linear-gradient(
-      to right,
-      oklch(0.9 0.01 250 / 35%) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      oklch(0.9 0.01 250 / 35%) 1px,
-      transparent 1px
-    );
+  --app-grid:
+    linear-gradient(to right, oklch(0.9 0.01 250 / 35%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.9 0.01 250 / 35%) 1px, transparent 1px);
   --app-grid-size: 56px;
 }
 
@@ -149,7 +144,8 @@
   --surface-1: oklch(0.18 0.02 250);
   --surface-2: oklch(0.22 0.02 250);
   --surface-3: oklch(0.28 0.02 250);
-  --app-gradient: radial-gradient(
+  --app-gradient:
+    radial-gradient(
       1200px 600px at 0% -20%,
       oklch(0.32 0.1 195 / 25%),
       transparent 65%
@@ -159,16 +155,9 @@
       oklch(0.38 0.12 80 / 20%),
       transparent 70%
     );
-  --app-grid: linear-gradient(
-      to right,
-      oklch(0.32 0.02 250 / 35%) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      oklch(0.32 0.02 250 / 35%) 1px,
-      transparent 1px
-    );
+  --app-grid:
+    linear-gradient(to right, oklch(0.32 0.02 250 / 35%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.32 0.02 250 / 35%) 1px, transparent 1px);
   --app-grid-size: 56px;
 }
 
@@ -182,7 +171,9 @@
     font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     background-image: var(--app-gradient), var(--app-grid);
-    background-size: auto, var(--app-grid-size) var(--app-grid-size);
+    background-size:
+      auto,
+      var(--app-grid-size) var(--app-grid-size);
     background-attachment: fixed;
   }
 }

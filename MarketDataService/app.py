@@ -582,6 +582,7 @@ class VwapApproachRequest(ScannerUniverseRequest):
 
 class DayGainerRow(BaseModel):
     symbol: str
+    exchange: Optional[str] = None
     price: Optional[float] = None
     prev_close: Optional[float] = None
     change_pct: Optional[float] = None
@@ -598,6 +599,7 @@ class DayGainerRow(BaseModel):
 
 class IntradayMomentumRow(BaseModel):
     symbol: str
+    exchange: Optional[str] = None
     price: Optional[float] = None
     day_high: Optional[float] = None
     day_low: Optional[float] = None
@@ -619,6 +621,7 @@ class IntradayMomentumRow(BaseModel):
 
 class HodVwapApproachRow(BaseModel):
     symbol: str
+    exchange: Optional[str] = None
     price: Optional[float] = None
     hod: Optional[float] = None
     distance_to_hod: Optional[float] = None
@@ -742,6 +745,7 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
         avg_volume_20d = avg_daily_vol_f
         market_cap = _safe_float(m.get("marketCap"))
         float_shares = _safe_float(m.get("floatShares"))
+        exchange = m.get("exchange")  # Get exchange from metadata
 
         prev_close = _safe_float(m.get("prevClose"))
         prev_bar_close = None
@@ -804,6 +808,7 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
         features.append(
             {
                 "ticker": ticker,
+                "exchange": exchange,
                 "prevClose": prev_close,
                 "prevBarClose": prev_bar_close,
                 "avgDailyVol": avg_daily_vol_f,
@@ -984,6 +989,7 @@ def scan_day_gainers(request: DayGainersRequest) -> dict:
         results.append(
             {
                 "symbol": symbol,
+                "exchange": f.get("exchange"),
                 "price": price,
                 "prev_close": prev_close,
                 "change_pct": _to_pct_points(change_ratio),
@@ -1108,6 +1114,7 @@ def scan_hod_vwap_momentum(request: HodVwapMomentumRequest) -> dict:
         results.append(
             {
                 "symbol": symbol,
+                "exchange": f.get("exchange"),
                 "price": price,
                 "day_high": day_high,
                 "day_low": day_low,
@@ -1268,6 +1275,7 @@ def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
         results.append(
             {
                 "symbol": symbol,
+                "exchange": f.get("exchange"),
                 "price": price,
                 "range_pct": _to_pct_points(range_pct),
                 "relative_volume": rel_vol,
@@ -1381,6 +1389,7 @@ def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
         results.append(
             {
                 "symbol": symbol,
+                "exchange": f.get("exchange"),
                 "price": price,
                 "hod": hod,
                 "distance_to_hod": _to_pct_points(dist_to_hod),

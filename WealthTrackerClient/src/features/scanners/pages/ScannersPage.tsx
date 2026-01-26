@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   RefreshCw,
+  X,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable'
 import {
   Select,
   SelectContent,
@@ -41,6 +47,7 @@ import { ActiveFilters } from '@/features/scanners/components/ActiveFilters'
 import { FilterChip } from '@/features/scanners/components/FilterChip'
 import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 import { TableSkeleton } from '@/features/scanners/components/TableSkeleton'
+import { TradingViewChart } from '@/features/scanners/components/TradingViewChart'
 import { scannerService } from '@/features/scanners/services/scannerService'
 import {
   SCANNERS,
@@ -110,6 +117,23 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(25)
   const [symbolFilter, setSymbolFilter] = useState('')
+  const [selectedSymbol, setSelectedSymbol] = useState<{
+    symbol: string
+    exchange: string | null
+  } | null>(null)
+  const [direction, setDirection] = useState<'horizontal' | 'vertical'>(
+    typeof window !== 'undefined' && window.innerWidth < 1024
+      ? 'vertical'
+      : 'horizontal'
+  )
+
+  useEffect(() => {
+    const handleResize = () => {
+      setDirection(window.innerWidth < 1024 ? 'vertical' : 'horizontal')
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const query = useQuery({
     queryKey: ['scanner', definition.id, appliedRequest],
@@ -822,86 +846,149 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
               />
             ) : (
               <div className="grid gap-3">
-                <div className="max-h-[600px] overflow-auto rounded-md border border-border/60 bg-card/60">
-                  <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
-                      <TableRow>
-                        <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
-                          #
-                        </TableHead>
-                        {definition.columns.map(col => {
-                          const active = sort.key === col.key
-                          const Icon = !active
-                            ? ArrowUpDown
-                            : sort.direction === 'asc'
-                              ? ArrowUp
-                              : ArrowDown
-                          return (
-                            <TableHead
-                              key={col.key}
-                              className={cn(
-                                'whitespace-nowrap',
-                                col.align === 'right' && 'text-right',
-                                col.key === 'symbol' && 'border-r border-border'
-                              )}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => toggleSort(col.key)}
-                                aria-label={`Sort by ${col.header}`}
-                                className={cn(
-                                  'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
-                                  active && 'text-foreground'
-                                )}
-                              >
-                                {col.header}
-                                <Icon className="h-3.5 w-3.5 opacity-70" />
-                              </button>
-                            </TableHead>
-                          )
-                        })}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pageRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={definition.columns.length + 1}
-                            className="py-10 text-center text-sm text-muted-foreground"
-                          >
-                            {query.isFetching
-                              ? 'Loading...'
-                              : 'No results. Try increasing universe limit or using period 5d outside market hours.'}
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        pageRows.map((row, idx) => (
-                          <TableRow key={`${String(row.symbol)}-${idx}`}>
-                            <TableCell className="w-12 text-center text-xs text-muted-foreground">
-                              {currentPageIndex * pageSize + idx + 1}
-                            </TableCell>
-                            {definition.columns.map(col => {
-                              const value = col.getValue(row as never)
-                              return (
+                <div className="max-h-[700px] overflow-hidden rounded-md border border-border/60 bg-card/60">
+                  <ResizablePanelGroup direction={direction}>
+                    <ResizablePanel
+                      defaultSize={selectedSymbol ? 60 : 100}
+                      minSize={selectedSymbol ? 30 : 100}
+                      maxSize={selectedSymbol ? undefined : 100}
+                    >
+                      <div className="h-[700px] overflow-auto">
+                        <Table>
+                          <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
+                            <TableRow>
+                              <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
+                                #
+                              </TableHead>
+                              {definition.columns.map(col => {
+                                const active = sort.key === col.key
+                                const Icon = !active
+                                  ? ArrowUpDown
+                                  : sort.direction === 'asc'
+                                    ? ArrowUp
+                                    : ArrowDown
+                                return (
+                                  <TableHead
+                                    key={col.key}
+                                    className={cn(
+                                      'whitespace-nowrap',
+                                      col.align === 'right' && 'text-right',
+                                      col.key === 'symbol' &&
+                                        'border-r border-border'
+                                    )}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSort(col.key)}
+                                      aria-label={`Sort by ${col.header}`}
+                                      className={cn(
+                                        'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
+                                        active && 'text-foreground'
+                                      )}
+                                    >
+                                      {col.header}
+                                      <Icon className="h-3.5 w-3.5 opacity-70" />
+                                    </button>
+                                  </TableHead>
+                                )
+                              })}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                             {pageRows.length === 0 ? (
+                              <TableRow>
                                 <TableCell
-                                  key={col.key}
-                                  className={cn(
-                                    'whitespace-nowrap',
-                                    col.align === 'right' &&
-                                      'text-right font-variant-numeric tabular-nums',
-                                    col.key === 'symbol' &&
-                                      'border-r border-border'
-                                  )}
+                                  colSpan={definition.columns.length + 1}
+                                  className="py-10 text-center text-sm text-muted-foreground"
                                 >
-                                  {renderCell(col.key, value)}
+                                  {query.isFetching
+                                    ? 'Loading...'
+                                    : 'No results. Try increasing universe limit or using period 5d outside market hours.'}
                                 </TableCell>
-                              )
-                            })}
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                              </TableRow>
+                            ) : (
+                              pageRows.map((row, idx) => {
+                                const symbol = String(row.symbol)
+                                const exchange =
+                                  (row as { exchange?: string }).exchange ||
+                                  null
+                                const isSelected =
+                                  selectedSymbol?.symbol === symbol
+                                return (
+                                  <TableRow
+                                    key={`${symbol}-${idx}`}
+                                    className={cn(
+                                      'cursor-pointer transition-colors hover:bg-muted/50',
+                                      isSelected &&
+                                        'bg-primary/5 hover:bg-primary/10'
+                                    )}
+                                    onClick={() =>
+                                      setSelectedSymbol({ symbol, exchange })
+                                    }
+                                  >
+                                    <TableCell className="w-12 text-center text-xs text-muted-foreground">
+                                      {currentPageIndex * pageSize + idx + 1}
+                                    </TableCell>
+                                    {definition.columns.map(col => {
+                                      const value = col.getValue(row as never)
+                                      return (
+                                        <TableCell
+                                          key={col.key}
+                                          className={cn(
+                                            'whitespace-nowrap',
+                                            col.align === 'right' &&
+                                              'text-right font-variant-numeric tabular-nums',
+                                            col.key === 'symbol' &&
+                                              'border-r border-border'
+                                          )}
+                                        >
+                                          {renderCell(col.key, value)}
+                                        </TableCell>
+                                      )
+                                    })}
+                                  </TableRow>
+                                )
+                              })
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </ResizablePanel>
+
+                    {selectedSymbol && <ResizableHandle withHandle />}
+
+                    {selectedSymbol && (
+                      <ResizablePanel defaultSize={40} minSize={20}>
+                        <div className="relative h-[700px] bg-muted/20">
+                          <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+                            <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1 shadow-sm backdrop-blur">
+                              <StockSymbolBadge
+                                symbol={selectedSymbol.symbol}
+                              />
+                              <span className="text-xs font-bold tracking-wider">
+                                {selectedSymbol.symbol}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="absolute right-3 top-3 z-20 flex gap-2">
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="h-7 w-7 rounded-full bg-background/80 shadow-sm backdrop-blur hover:bg-background"
+                              onClick={() => setSelectedSymbol(null)}
+                              title="Close chart"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                          <TradingViewChart
+                            symbol={selectedSymbol.symbol}
+                            exchange={selectedSymbol.exchange}
+                          />
+                        </div>
+                      </ResizablePanel>
+                    )}
+                  </ResizablePanelGroup>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">

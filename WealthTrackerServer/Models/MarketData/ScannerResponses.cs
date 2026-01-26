@@ -43,6 +43,10 @@ public class DayGainerRow
     [JsonPropertyName("symbol")]
     public string Symbol { get; set; } = string.Empty;
 
+    [JsonPropertyName("exchange")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Exchange { get; set; }
+
     [JsonPropertyName("price")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Price { get; set; }
@@ -75,6 +79,10 @@ public class IntradayMomentumRow
 {
     [JsonPropertyName("symbol")]
     public string Symbol { get; set; } = string.Empty;
+
+    [JsonPropertyName("exchange")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Exchange { get; set; }
 
     [JsonPropertyName("price")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -129,6 +137,10 @@ public class HodVwapApproachRow
 {
     [JsonPropertyName("symbol")]
     public string Symbol { get; set; } = string.Empty;
+
+    [JsonPropertyName("exchange")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Exchange { get; set; }
 
     [JsonPropertyName("price")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -77,6 +77,7 @@ export type ScannerRequestById = {
 
 export type DayGainerRow = {
   symbol: string
+  exchange?: string | null
   price?: number | null
   prev_close?: number | null
   change_pct?: number | null
@@ -88,6 +89,7 @@ export type DayGainerRow = {
 
 export type IntradayMomentumRow = {
   symbol: string
+  exchange?: string | null
   price?: number | null
   day_high?: number | null
   day_low?: number | null
@@ -104,6 +106,7 @@ export type IntradayMomentumRow = {
 
 export type HodVwapApproachRow = {
   symbol: string
+  exchange?: string | null
   price?: number | null
   hod?: number | null
   distance_to_hod?: number | null
