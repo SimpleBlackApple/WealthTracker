@@ -74,7 +74,9 @@ class AuthService {
 
               localStorage.setItem('accessToken', newAccessToken)
 
-              originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+              }
               return instance(originalRequest)
             }
 

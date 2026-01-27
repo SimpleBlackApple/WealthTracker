@@ -1,12 +1,4 @@
-import { useEffect, useRef } from 'react'
-
-declare global {
-  interface Window {
-    TradingView: {
-      widget: new (config: Record<string, unknown>) => void
-    }
-  }
-}
+import { useEffect, useRef, useState, memo } from 'react'
 
 interface TradingViewChartProps {
   symbol: string
@@ -15,8 +7,6 @@ interface TradingViewChartProps {
 
 /**
  * Maps Yahoo Finance exchange codes to TradingView exchange prefixes.
- * @param exchange - The exchange code from Yahoo Finance (e.g., 'NMS', 'NYQ', 'NCM', 'NGM', 'ASE')
- * @returns The TradingView exchange prefix (e.g., 'NASDAQ', 'NYSE', 'AMEX')
  */
 function mapExchangeToTradingView(exchange?: string | null): string | null {
   if (!exchange) return null
@@ -66,111 +56,138 @@ function mapExchangeToTradingView(exchange?: string | null): string | null {
   return null
 }
 
+// Helper to resolve CSS variable to RGB string
+const resolveThemeColor = (variable: string): string => {
+  if (typeof window === 'undefined') return '#ffffff'
+  const el = document.createElement('div')
+  el.style.color = `var(${variable})`
+  el.style.display = 'none'
+  document.body.appendChild(el)
+  const styles = window.getComputedStyle(el)
+  const color = styles.color
+  document.body.removeChild(el)
+  return color
+}
+
 const THEME_COLORS = {
   light: {
-    up: '#10b981', // Emerald 500 (Matches --gain)
-    down: '#ef4444', // Red 500 (Matches --loss)
-    bg: '#ffffff', // Fallback
-    toolbar: '#f1f3f6',
-    border: '#e5e7eb',
+    up: '#10b981', // Emerald 500
+    down: '#ef4444', // Red 500
   },
   dark: {
-    up: '#34d399', // Emerald 400 (Matches --gain in dark mode)
-    down: '#f87171', // Red 400 (Matches --loss in dark mode)
-    bg: '#1e1e2e', // Fallback
-    toolbar: '#1e1e2e',
-    border: '#374151',
+    up: '#34d399', // Emerald 400
+    down: '#f87171', // Red 400
   },
 }
 
-export function TradingViewChart({ symbol, exchange }: TradingViewChartProps) {
+function TradingViewChartComponent({
+  symbol,
+  exchange,
+}: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [config, setConfig] = useState<{ bg: string; isDark: boolean }>({
+    bg: '#ffffff',
+    isDark: false,
+  })
+
+  // Watch for theme changes and resolve background color dynamically
+  useEffect(() => {
+    const updateTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark')
+      // Resolve --background to ensure consistency with global app background
+      const bg = resolveThemeColor('--background')
+      setConfig({ bg, isDark })
+    }
+
+    updateTheme()
+
+    const observer = new MutationObserver(updateTheme)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
-    // Check if the script is already loaded
-    const scriptId = 'tradingview-widget-script'
-    let script = document.getElementById(scriptId) as HTMLScriptElement
+    if (!containerRef.current) return
 
-    const initWidget = () => {
-      if (containerRef.current && window.TradingView) {
-        // Clear container first to avoid multiple widgets
-        containerRef.current.innerHTML = ''
-        const widgetContainer = document.createElement('div')
-        widgetContainer.id = `tv_chart_${Math.random().toString(36).substring(7)}`
-        widgetContainer.className = 'h-full w-full'
-        containerRef.current.appendChild(widgetContainer)
+    // Clear container
+    containerRef.current.innerHTML = ''
 
-        // Format symbol for TradingView
-        const mappedExchange = mapExchangeToTradingView(exchange)
-        const tvSymbol = symbol.includes(':')
-          ? symbol
-          : mappedExchange
-            ? `${mappedExchange}:${symbol}`
-            : symbol
+    // Create wrapper structure required for the widget
+    const wrapper = document.createElement('div')
+    wrapper.className = 'tradingview-widget-container'
+    wrapper.style.height = '100%'
+    wrapper.style.width = '100%'
 
-        const isDark = document.documentElement.classList.contains('dark')
-        const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
+    const widgetContainer = document.createElement('div')
+    widgetContainer.className = 'tradingview-widget-container__widget'
+    widgetContainer.style.height = 'calc(100% - 32px)'
+    widgetContainer.style.width = '100%'
 
-        new window.TradingView.widget({
-          autosize: true,
-          symbol: tvSymbol,
-          interval: 'D',
-          timezone: 'Etc/UTC',
-          theme: isDark ? 'dark' : 'light',
-          style: '1',
-          locale: 'en',
-          toolbar_bg: colors.toolbar,
-          enable_publishing: false,
-          hide_side_toolbar: true,
-          allow_symbol_change: true,
-          container_id: widgetContainer.id,
-          overrides: {
-            // Candles
-            'mainSeriesProperties.candleStyle.upColor': colors.up,
-            'mainSeriesProperties.candleStyle.downColor': colors.down,
-            'mainSeriesProperties.candleStyle.borderUpColor': colors.up,
-            'mainSeriesProperties.candleStyle.borderDownColor': colors.down,
-            'mainSeriesProperties.candleStyle.wickUpColor': colors.up,
-            'mainSeriesProperties.candleStyle.wickDownColor': colors.down,
-            // Volume
-            'volume.volume.color.0': colors.down,
-            'volume.volume.color.1': colors.up,
-            // Pane background
-            'paneProperties.background': isDark ? '#1e1e2e' : '#fafafa', // Use slightly off-white for light mode
-            'paneProperties.backgroundType': 'solid',
-            'paneProperties.vertGridProperties.color': isDark
-              ? '#2B2B43'
-              : '#E6E6E6',
-            'paneProperties.horzGridProperties.color': isDark
-              ? '#2B2B43'
-              : '#E6E6E6',
-            // Font
-            'paneProperties.legendProperties.fontFamily':
-              "'IBM Plex Sans', sans-serif",
-          },
-        })
-      }
-    }
+    const copyright = document.createElement('div')
+    copyright.className = 'tradingview-widget-copyright'
+    copyright.innerHTML = `<a href="https://www.tradingview.com/symbols/${symbol}/" rel="noopener nofollow" target="_blank"><span class="blue-text">${symbol} stock chart</span></a><span class="trademark"> by TradingView</span>`
 
-    if (!script) {
-      script = document.createElement('script')
-      script.id = scriptId
-      script.src = 'https://s3.tradingview.com/tv.js'
-      script.async = true
-      script.onload = initWidget
-      document.head.appendChild(script)
-    } else if (window.TradingView) {
-      initWidget()
-    } else {
-      script.addEventListener('load', initWidget)
-    }
+    wrapper.appendChild(widgetContainer)
+    wrapper.appendChild(copyright)
+    containerRef.current.appendChild(wrapper)
 
-    return () => {
-      if (script) {
-        script.removeEventListener('load', initWidget)
-      }
-    }
-  }, [symbol, exchange])
+    // Script injection
+    const script = document.createElement('script')
+    script.src =
+      'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
+    script.type = 'text/javascript'
+    script.async = true
+
+    // Format symbol
+    const mappedExchange = mapExchangeToTradingView(exchange)
+    const tvSymbol = symbol.includes(':')
+      ? symbol
+      : mappedExchange
+        ? `${mappedExchange}:${symbol}`
+        : symbol
+
+    const { bg, isDark } = config
+    const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
+
+    script.innerHTML = JSON.stringify({
+      autosize: true,
+      symbol: tvSymbol,
+      interval: 'D',
+      timezone: 'Etc/UTC',
+      theme: isDark ? 'dark' : 'light',
+      style: '1',
+      locale: 'en',
+      enable_publishing: false,
+      hide_side_toolbar: true,
+      hide_top_toolbar: true,
+      allow_symbol_change: true,
+      backgroundColor: bg,
+      save_image: false,
+      support_host: 'https://www.tradingview.com',
+      overrides: {
+        'mainSeriesProperties.candleStyle.upColor': colors.up,
+        'mainSeriesProperties.candleStyle.downColor': colors.down,
+        'mainSeriesProperties.candleStyle.borderUpColor': colors.up,
+        'mainSeriesProperties.candleStyle.borderDownColor': colors.down,
+        'mainSeriesProperties.candleStyle.wickUpColor': colors.up,
+        'mainSeriesProperties.candleStyle.wickDownColor': colors.down,
+        'volume.volume.color.0': colors.down,
+        'volume.volume.color.1': colors.up,
+        'paneProperties.vertGridProperties.color': isDark
+          ? '#2B2B43'
+          : '#E6E6E6',
+        'paneProperties.horzGridProperties.color': isDark
+          ? '#2B2B43'
+          : '#E6E6E6',
+      },
+    })
+
+    widgetContainer.appendChild(script)
+  }, [symbol, exchange, config])
 
   return (
     <div
@@ -179,3 +196,5 @@ export function TradingViewChart({ symbol, exchange }: TradingViewChartProps) {
     />
   )
 }
+
+export const TradingViewChart = memo(TradingViewChartComponent)
