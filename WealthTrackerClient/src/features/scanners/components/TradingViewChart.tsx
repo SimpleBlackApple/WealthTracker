@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, memo } from 'react'
+import { formatHex, parse } from 'culori'
 
 interface TradingViewChartProps {
   symbol: string
@@ -66,7 +67,17 @@ const resolveThemeColor = (variable: string): string => {
   const styles = window.getComputedStyle(el)
   const color = styles.color
   document.body.removeChild(el)
-  return color
+
+  // Convert color to hex format using culori
+  // Parse the color (handles oklch, rgb, etc.) and convert to hex
+  const parsedColor = parse(color)
+  if (parsedColor) {
+    const hexColor = formatHex(parsedColor)
+    return hexColor
+  }
+
+  // Fallback to white if parsing fails
+  return '#ffffff'
 }
 
 const THEME_COLORS = {
@@ -96,6 +107,7 @@ function TradingViewChartComponent({
       const isDark = document.documentElement.classList.contains('dark')
       // Resolve --background to ensure consistency with global app background
       const bg = resolveThemeColor('--background')
+      console.log('Resolved background color:', bg)
       setConfig({ bg, isDark })
     }
 
@@ -154,7 +166,9 @@ function TradingViewChartComponent({
     const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
 
     script.innerHTML = JSON.stringify({
-      autosize: true,
+      autosize: false,
+      width: '100%',
+      height: '100%',
       symbol: tvSymbol,
       interval: 'D',
       timezone: 'Etc/UTC',
@@ -187,7 +201,7 @@ function TradingViewChartComponent({
     })
 
     widgetContainer.appendChild(script)
-  }, [symbol, exchange, config])
+  })
 
   return (
     <div
