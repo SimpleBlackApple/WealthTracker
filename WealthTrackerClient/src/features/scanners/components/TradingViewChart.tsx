@@ -96,22 +96,28 @@ function TradingViewChartComponent({
   exchange,
 }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [config, setConfig] = useState<{ bg: string; isDark: boolean }>({
-    bg: '#ffffff',
-    isDark: false,
-  })
+
+  // Initialize theme config once on mount
+  const getInitialConfig = () => {
+    const isDark = document.documentElement.classList.contains('dark')
+    const bg = resolveThemeColor('--background')
+    return { bg, isDark }
+  }
+
+  const [config, setConfig] = useState(getInitialConfig)
 
   // Watch for theme changes and resolve background color dynamically
   useEffect(() => {
     const updateTheme = () => {
       const isDark = document.documentElement.classList.contains('dark')
-      // Resolve --background to ensure consistency with global app background
       const bg = resolveThemeColor('--background')
-      console.log('Resolved background color:', bg)
-      setConfig({ bg, isDark })
-    }
 
-    updateTheme()
+      setConfig(prev => {
+        // Only update if theme actually changed
+        if (prev.bg === bg && prev.isDark === isDark) return prev
+        return { bg, isDark }
+      })
+    }
 
     const observer = new MutationObserver(updateTheme)
     observer.observe(document.documentElement, {
@@ -125,83 +131,89 @@ function TradingViewChartComponent({
   useEffect(() => {
     if (!containerRef.current) return
 
-    // Clear container
-    containerRef.current.innerHTML = ''
+    const container = containerRef.current
 
-    // Create wrapper structure required for the widget
-    const wrapper = document.createElement('div')
-    wrapper.className = 'tradingview-widget-container'
-    wrapper.style.height = '100%'
-    wrapper.style.width = '100%'
+    // Clear container completely (synchronous)
+    container.innerHTML = ''
 
-    const widgetContainer = document.createElement('div')
-    widgetContainer.className = 'tradingview-widget-container__widget'
-    widgetContainer.style.height = 'calc(100% - 32px)'
-    widgetContainer.style.width = '100%'
+    // Use setTimeout to defer widget creation to next event loop
+    // This ensures cleanup is complete before creating new widget
+    const timeoutId = setTimeout(() => {
+      // Create wrapper structure required for the widget
+      const wrapper = document.createElement('div')
+      wrapper.className = 'tradingview-widget-container'
+      wrapper.style.height = '100%'
+      wrapper.style.width = '100%'
 
-    const copyright = document.createElement('div')
-    copyright.className = 'tradingview-widget-copyright'
-    copyright.innerHTML = `<a href="https://www.tradingview.com/symbols/${symbol}/" rel="noopener nofollow" target="_blank"><span class="blue-text">${symbol} stock chart</span></a><span class="trademark"> by TradingView</span>`
+      const widgetContainer = document.createElement('div')
+      widgetContainer.className = 'tradingview-widget-container__widget'
+      widgetContainer.style.height = 'calc(100% - 32px)'
+      widgetContainer.style.width = '100%'
 
-    wrapper.appendChild(widgetContainer)
-    wrapper.appendChild(copyright)
-    containerRef.current.appendChild(wrapper)
+      const copyright = document.createElement('div')
+      copyright.className = 'tradingview-widget-copyright'
+      copyright.innerHTML = `<a href="https://www.tradingview.com/symbols/${symbol}/" rel="noopener nofollow" target="_blank"><span class="blue-text">${symbol} stock chart</span></a><span class="trademark"> by TradingView</span>`
 
-    // Script injection
-    const script = document.createElement('script')
-    script.src =
-      'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
-    script.type = 'text/javascript'
-    script.async = true
+      wrapper.appendChild(widgetContainer)
+      wrapper.appendChild(copyright)
+      container.appendChild(wrapper)
 
-    // Format symbol
-    const mappedExchange = mapExchangeToTradingView(exchange)
-    const tvSymbol = symbol.includes(':')
-      ? symbol
-      : mappedExchange
-        ? `${mappedExchange}:${symbol}`
-        : symbol
+      // Script injection
+      const script = document.createElement('script')
+      script.src =
+        'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
+      script.type = 'text/javascript'
+      script.async = true
 
-    const { bg, isDark } = config
-    const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
+      // Format symbol
+      const mappedExchange = mapExchangeToTradingView(exchange)
+      const tvSymbol = symbol.includes(':')
+        ? symbol
+        : mappedExchange
+          ? `${mappedExchange}:${symbol}`
+          : symbol
 
-    script.innerHTML = JSON.stringify({
-      autosize: false,
-      width: '100%',
-      height: '100%',
-      symbol: tvSymbol,
-      interval: 'D',
-      timezone: 'Etc/UTC',
-      theme: isDark ? 'dark' : 'light',
-      style: '1',
-      locale: 'en',
-      enable_publishing: false,
-      hide_side_toolbar: true,
-      hide_top_toolbar: true,
-      allow_symbol_change: true,
-      backgroundColor: bg,
-      save_image: false,
-      support_host: 'https://www.tradingview.com',
-      overrides: {
-        'mainSeriesProperties.candleStyle.upColor': colors.up,
-        'mainSeriesProperties.candleStyle.downColor': colors.down,
-        'mainSeriesProperties.candleStyle.borderUpColor': colors.up,
-        'mainSeriesProperties.candleStyle.borderDownColor': colors.down,
-        'mainSeriesProperties.candleStyle.wickUpColor': colors.up,
-        'mainSeriesProperties.candleStyle.wickDownColor': colors.down,
-        'volume.volume.color.0': colors.down,
-        'volume.volume.color.1': colors.up,
-        'paneProperties.vertGridProperties.color': isDark
-          ? '#2B2B43'
-          : '#E6E6E6',
-        'paneProperties.horzGridProperties.color': isDark
-          ? '#2B2B43'
-          : '#E6E6E6',
-      },
-    })
+      const { bg, isDark } = config
+      const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
 
-    widgetContainer.appendChild(script)
-  })
+      script.innerHTML = JSON.stringify({
+        autosize: true,
+        symbol: tvSymbol,
+        interval: 'D',
+        timezone: 'Etc/UTC',
+        theme: isDark ? 'dark' : 'light',
+        style: '1',
+        locale: 'en',
+        enable_publishing: false,
+        hide_side_toolbar: true,
+        hide_top_toolbar: true,
+        allow_symbol_change: true,
+        backgroundColor: bg,
+        save_image: false,
+        support_host: 'https://www.tradingview.com',
+        overrides: {
+          'mainSeriesProperties.candleStyle.upColor': colors.up,
+          'mainSeriesProperties.candleStyle.downColor': colors.down,
+          'mainSeriesProperties.candleStyle.borderUpColor': colors.up,
+          'mainSeriesProperties.candleStyle.borderDownColor': colors.down,
+          'mainSeriesProperties.candleStyle.wickUpColor': colors.up,
+          'mainSeriesProperties.candleStyle.wickDownColor': colors.down,
+          'volume.volume.color.0': colors.down,
+          'volume.volume.color.1': colors.up,
+          'paneProperties.vertGridProperties.color': isDark
+            ? '#2B2B43'
+            : '#E6E6E6',
+          'paneProperties.horzGridProperties.color': isDark
+            ? '#2B2B43'
+            : '#E6E6E6',
+        },
+      })
+
+      widgetContainer.appendChild(script)
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
+  }, [symbol, exchange, config])
 
   return (
     <div
