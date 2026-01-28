@@ -139,12 +139,12 @@ public class ScannerController : ControllerBase
     {
         if (request.UniverseLimit <= 0)
         {
-            request.UniverseLimit = 50;
+            request.UniverseLimit = 25;
         }
 
         if (request.Limit <= 0)
         {
-            request.Limit = 25;
+            request.Limit = 7;
         }
 
         if (request.MinPrice < 1.5)

@@ -115,7 +115,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
   const [sort, setSort] = useState<SortState>(definition.defaultSort)
   const [pageIndex, setPageIndex] = useState(0)
-  const [pageSize, setPageSize] = useState(25)
   const [symbolFilter, setSymbolFilter] = useState('')
   const [selectedSymbol, setSelectedSymbol] = useState<{
     symbol: string
@@ -191,6 +190,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     })
   }, [definition.columns, filteredRows, sort.direction, sort.key])
 
+  const pageSize = Math.max(1, coerceInt(String(appliedRequest.limit ?? ''), 7))
   const totalRows = sortedRows.length
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize))
   const currentPageIndex = Math.min(pageIndex, totalPages - 1)
@@ -231,18 +231,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
         label: 'Interval',
         value: appliedRequest.interval,
         defaultValue: definition.defaultRequest.interval,
-      },
-      {
-        key: 'universeLimit',
-        label: 'Universe',
-        value: appliedRequest.universeLimit,
-        defaultValue: definition.defaultRequest.universeLimit,
-      },
-      {
-        key: 'limit',
-        label: 'Limit',
-        value: appliedRequest.limit,
-        defaultValue: definition.defaultRequest.limit,
       },
     ]
 
@@ -330,8 +318,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-      <Card className="h-fit border-border/60 bg-card/80 shadow-sm animate-in fade-in-50 lg:sticky lg:top-[80px]">
+    <div className="grid gap-4 lg:grid-cols-[260px_1fr] lg:items-stretch">
+      <Card className="h-full border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold">Scanners</CardTitle>
         </CardHeader>
@@ -452,71 +440,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   className="relative flex flex-wrap items-center gap-2 overflow-visible md:flex-nowrap md:overflow-x-auto md:pb-2 md:-mb-2 md:px-8"
                   style={{ scrollbarWidth: 'thin', scrollbarGutter: 'stable' }}
                 >
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FilterChip
-                        label="Universe"
-                        value={draftRequest.universeLimit}
-                        defaultValue={definition.defaultRequest.universeLimit}
-                      />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-40 p-3">
-                      <div className="grid gap-2">
-                        <Label htmlFor="universeLimit" className="text-xs">
-                          Universe limit
-                        </Label>
-                        <Input
-                          id="universeLimit"
-                          type="number"
-                          min={1}
-                          max={500}
-                          value={String(draftRequest.universeLimit)}
-                          onChange={e =>
-                            setDraftRequest(prev => ({
-                              ...prev,
-                              universeLimit: coerceInt(
-                                e.target.value,
-                                prev.universeLimit
-                              ),
-                            }))
-                          }
-                          className="h-8"
-                        />
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FilterChip
-                        label="Limit"
-                        value={draftRequest.limit}
-                        defaultValue={definition.defaultRequest.limit}
-                      />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-40 p-3">
-                      <div className="grid gap-2">
-                        <Label htmlFor="limit" className="text-xs">
-                          Result limit
-                        </Label>
-                        <Input
-                          id="limit"
-                          type="number"
-                          min={1}
-                          max={200}
-                          value={String(draftRequest.limit)}
-                          onChange={e =>
-                            setDraftRequest(prev => ({
-                              ...prev,
-                              limit: coerceInt(e.target.value, prev.limit),
-                            }))
-                          }
-                          className="h-8"
-                        />
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-
                   <Popover>
                     <PopoverTrigger asChild>
                       <FilterChip
@@ -788,14 +711,23 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   <Select
                     value={String(pageSize)}
                     onValueChange={value => {
+                      const next = Number(value)
                       setPageIndex(0)
-                      setPageSize(Number(value))
+                      setDraftRequest(prev => ({
+                        ...prev,
+                        limit: next,
+                      }))
+                      setAppliedRequest(prev => ({
+                        ...prev,
+                        limit: next,
+                      }))
                     }}
                   >
                     <SelectTrigger className="h-7 w-[70px] text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="7">7</SelectItem>
                       <SelectItem value="10">10</SelectItem>
                       <SelectItem value="25">25</SelectItem>
                       <SelectItem value="50">50</SelectItem>
@@ -842,116 +774,176 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
             ) : query.isFetching && pageRows.length === 0 ? (
               <TableSkeleton
                 columns={definition.columns.length + 1}
-                rows={10}
+                rows={pageSize}
               />
             ) : (
               <div className="grid gap-3">
-                <div className="max-h-[700px] overflow-hidden rounded-md border border-border/60 bg-card/60">
-                  <ResizablePanelGroup direction={direction}>
+                <div className="overflow-hidden rounded-md border border-border/60 bg-card/60">
+                  <ResizablePanelGroup
+                    direction={direction}
+                    className="min-h-[420px]"
+                  >
                     <ResizablePanel
                       defaultSize={selectedSymbol ? 60 : 100}
                       minSize={selectedSymbol ? 30 : 100}
                       maxSize={selectedSymbol ? undefined : 100}
                     >
-                      <div className="h-[700px] overflow-auto">
-                        <Table>
-                          <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
-                            <TableRow>
-                              <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
-                                #
-                              </TableHead>
-                              {definition.columns.map(col => {
-                                const active = sort.key === col.key
-                                const Icon = !active
-                                  ? ArrowUpDown
-                                  : sort.direction === 'asc'
-                                    ? ArrowUp
-                                    : ArrowDown
-                                return (
-                                  <TableHead
-                                    key={col.key}
-                                    className={cn(
-                                      'whitespace-nowrap',
-                                      col.align === 'right' && 'text-right',
-                                      col.key === 'symbol' &&
-                                        'border-r border-border'
-                                    )}
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleSort(col.key)}
-                                      aria-label={`Sort by ${col.header}`}
+                      <div className="flex h-full flex-col">
+                        <div className="shrink-0 overflow-hidden">
+                          <Table>
+                            <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
+                              <TableRow>
+                                <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
+                                  #
+                                </TableHead>
+                                {definition.columns.map(col => {
+                                  const active = sort.key === col.key
+                                  const Icon = !active
+                                    ? ArrowUpDown
+                                    : sort.direction === 'asc'
+                                      ? ArrowUp
+                                      : ArrowDown
+                                  return (
+                                    <TableHead
+                                      key={col.key}
                                       className={cn(
-                                        'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
-                                        active && 'text-foreground'
+                                        'whitespace-nowrap',
+                                        col.align === 'right' && 'text-right',
+                                        col.key === 'symbol' &&
+                                          'border-r border-border'
                                       )}
                                     >
-                                      {col.header}
-                                      <Icon className="h-3.5 w-3.5 opacity-70" />
-                                    </button>
-                                  </TableHead>
-                                )
-                              })}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {pageRows.length === 0 ? (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={definition.columns.length + 1}
-                                  className="py-10 text-center text-sm text-muted-foreground"
-                                >
-                                  {query.isFetching
-                                    ? 'Loading...'
-                                    : 'No results. Try increasing universe limit or using period 5d outside market hours.'}
-                                </TableCell>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleSort(col.key)}
+                                        aria-label={`Sort by ${col.header}`}
+                                        className={cn(
+                                          'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
+                                          active && 'text-foreground'
+                                        )}
+                                      >
+                                        {col.header}
+                                        <Icon className="h-3.5 w-3.5 opacity-70" />
+                                      </button>
+                                    </TableHead>
+                                  )
+                                })}
                               </TableRow>
-                            ) : (
-                              pageRows.map((row, idx) => {
-                                const symbol = String(row.symbol)
-                                const exchange =
-                                  (row as { exchange?: string }).exchange ||
-                                  null
-                                const isSelected =
-                                  selectedSymbol?.symbol === symbol
-                                return (
-                                  <TableRow
-                                    key={`${symbol}-${idx}`}
-                                    className={cn(
-                                      'cursor-pointer transition-colors hover:bg-muted/50',
-                                      isSelected &&
-                                        'bg-primary/5 hover:bg-primary/10'
-                                    )}
-                                    onClick={() =>
-                                      setSelectedSymbol({ symbol, exchange })
-                                    }
+                            </TableHeader>
+                            <TableBody>
+                              {pageRows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell
+                                    colSpan={definition.columns.length + 1}
+                                    className="py-10 text-center text-sm text-muted-foreground"
                                   >
-                                    <TableCell className="w-12 text-center text-xs text-muted-foreground">
-                                      {currentPageIndex * pageSize + idx + 1}
-                                    </TableCell>
-                                    {definition.columns.map(col => {
-                                      const value = col.getValue(row as never)
-                                      return (
-                                        <TableCell
-                                          key={col.key}
-                                          className={cn(
-                                            'whitespace-nowrap',
-                                            col.align === 'right' &&
-                                              'text-right font-variant-numeric tabular-nums',
-                                            col.key === 'symbol' &&
-                                              'border-r border-border'
-                                          )}
-                                        >
-                                          {renderCell(col.key, value)}
-                                        </TableCell>
-                                      )
-                                    })}
-                                  </TableRow>
-                                )
-                              })
-                            )}
-                          </TableBody>
-                        </Table>
+                                    {query.isFetching
+                                      ? 'Loading...'
+                                      : 'No results. Try widening filters or using period 5d outside market hours.'}
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                pageRows.map((row, idx) => {
+                                  const symbol = String(row.symbol)
+                                  const exchange =
+                                    (row as { exchange?: string }).exchange ||
+                                    null
+                                  const isSelected =
+                                    selectedSymbol?.symbol === symbol
+                                  return (
+                                    <TableRow
+                                      key={`${symbol}-${idx}`}
+                                      className={cn(
+                                        'cursor-pointer transition-colors hover:bg-muted/50',
+                                        isSelected &&
+                                          'bg-primary/5 hover:bg-primary/10'
+                                      )}
+                                      onClick={() =>
+                                        setSelectedSymbol({ symbol, exchange })
+                                      }
+                                    >
+                                      <TableCell className="w-12 text-center text-xs text-muted-foreground">
+                                        {currentPageIndex * pageSize + idx + 1}
+                                      </TableCell>
+                                      {definition.columns.map(col => {
+                                        const value = col.getValue(row as never)
+                                        return (
+                                          <TableCell
+                                            key={col.key}
+                                            className={cn(
+                                              'whitespace-nowrap',
+                                              col.align === 'right' &&
+                                                'text-right font-variant-numeric tabular-nums',
+                                              col.key === 'symbol' &&
+                                                'border-r border-border'
+                                            )}
+                                          >
+                                            {renderCell(col.key, value)}
+                                          </TableCell>
+                                        )
+                                      })}
+                                    </TableRow>
+                                  )
+                                })
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        <div className="shrink-0 border-t border-border/60 bg-card/60 px-3 py-2 pr-6">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="text-xs text-muted-foreground">
+                              {totalRows === 0
+                                ? '0 rows'
+                                : `${currentPageIndex * pageSize + 1}-${Math.min(
+                                    (currentPageIndex + 1) * pageSize,
+                                    totalRows
+                                  )} of ${totalRows.toLocaleString()}`}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPageIndex(0)}
+                                disabled={currentPageIndex === 0}
+                              >
+                                First
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setPageIndex(p => Math.max(0, p - 1))
+                                }
+                                disabled={currentPageIndex === 0}
+                              >
+                                Prev
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setPageIndex(p =>
+                                    Math.min(totalPages - 1, p + 1)
+                                  )
+                                }
+                                disabled={currentPageIndex >= totalPages - 1}
+                              >
+                                Next
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPageIndex(totalPages - 1)}
+                                disabled={currentPageIndex >= totalPages - 1}
+                              >
+                                Last
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex-1" />
                       </div>
                     </ResizablePanel>
 
@@ -959,7 +951,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
                     {selectedSymbol && (
                       <ResizablePanel defaultSize={40} minSize={20}>
-                        <div className="flex h-[700px] flex-col bg-muted/20">
+                        <div className="flex h-full min-h-[420px] flex-col bg-muted/20">
                           <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-3 py-2">
                             <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1 shadow-sm backdrop-blur">
                               <StockSymbolBadge
@@ -989,50 +981,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       </ResizablePanel>
                     )}
                   </ResizablePanelGroup>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs text-muted-foreground">
-                    {currentPageIndex * pageSize + 1}-
-                    {Math.min((currentPageIndex + 1) * pageSize, totalRows)} of{' '}
-                    {totalRows.toLocaleString()}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPageIndex(0)}
-                      disabled={currentPageIndex === 0}
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPageIndex(p => Math.max(0, p - 1))}
-                      disabled={currentPageIndex === 0}
-                    >
-                      Prev
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setPageIndex(p => Math.min(totalPages - 1, p + 1))
-                      }
-                      disabled={currentPageIndex >= totalPages - 1}
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPageIndex(totalPages - 1)}
-                      disabled={currentPageIndex >= totalPages - 1}
-                    >
-                      Last
-                    </Button>
-                  </div>
                 </div>
               </div>
             )}

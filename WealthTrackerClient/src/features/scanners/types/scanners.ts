@@ -149,8 +149,8 @@ export type ScannerDefinition<TScannerId extends ScannerId> = {
 }
 
 const baseDefaults: Omit<ScannerUniverseRequest, 'asOf'> = {
-  universeLimit: 50,
-  limit: 25,
+  universeLimit: 25,
+  limit: 7,
   minPrice: 1.5,
   maxPrice: 30,
   minAvgVol: 1_000_000,

@@ -40,8 +40,8 @@ public class ScannerControllerTests
     var ok = Assert.IsType<OkObjectResult>(result.Result);
     Assert.NotNull(ok.Value);
     Assert.NotNull(captured);
-    Assert.Equal(50, captured!.UniverseLimit);
-    Assert.Equal(25, captured.Limit);
+    Assert.Equal(25, captured!.UniverseLimit);
+    Assert.Equal(7, captured.Limit);
     Assert.Equal(1.5, captured.MinPrice);
     Assert.Equal("5m", captured.Interval);
     Assert.Equal("1d", captured.Period);

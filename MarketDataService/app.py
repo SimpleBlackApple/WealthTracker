@@ -28,6 +28,18 @@ HOD_APPROACH_ADAPTIVE_CAP_PCT = 2.5
 VWAP_APPROACH_DEFAULT_MAX_DIST_PCT = 1.7
 VWAP_APPROACH_ADAPTIVE_CAP_PCT = 1.75
 
+try:
+    SCANNER_UNIVERSE_LIMIT = int(os.getenv("SCANNER_UNIVERSE_LIMIT", "25"))
+except ValueError:
+    SCANNER_UNIVERSE_LIMIT = 25
+SCANNER_UNIVERSE_LIMIT = max(1, min(SCANNER_UNIVERSE_LIMIT, 500))
+
+try:
+    SCANNER_RESULTS_LIMIT = int(os.getenv("SCANNER_RESULTS_LIMIT", str(SCANNER_UNIVERSE_LIMIT)))
+except ValueError:
+    SCANNER_RESULTS_LIMIT = SCANNER_UNIVERSE_LIMIT
+SCANNER_RESULTS_LIMIT = max(1, min(SCANNER_RESULTS_LIMIT, 500))
+
 REL_VOL_METHOD = (os.getenv("REL_VOL_METHOD", "recent_k_1m") or "recent_k_1m").strip().lower()
 
 REL_VOL_INTERVAL = (os.getenv("REL_VOL_INTERVAL", "1m") or "1m").strip()
@@ -649,8 +661,9 @@ def _close_slope(df: pd.DataFrame, n: int) -> Optional[float]:
 
 
 class ScannerUniverseRequest(BaseModel):
-    universeLimit: int = 50
-    limit: int = 25
+    universeLimit: int = SCANNER_UNIVERSE_LIMIT
+    # Frontend uses this as page size; server-side result limit is env-controlled.
+    limit: int = 7
 
     minPrice: float = 1.5
     maxPrice: float = 30.0
@@ -836,7 +849,7 @@ def _features_cache_key(request: ScannerUniverseRequest) -> str:
     min_price, max_price = _effective_price_bounds(request)
     return (
         "md:scanner:features:"
-        f"u={request.universeLimit}:minP={min_price}:maxP={max_price}:"
+        f"u={SCANNER_UNIVERSE_LIMIT}:minP={min_price}:maxP={max_price}:"
         f"minV={request.minAvgVol}:minChg={request.minChangePct}:"
         f"int={interval}:per={period}:prepost={int(request.prepost)}:slopeN={request.closeSlopeN}:"
         f"relM={REL_VOL_METHOD}:relInt={REL_VOL_INTERVAL}:relHistD={REL_VOL_HISTORY_DAYS}:"
@@ -848,14 +861,14 @@ def _features_cache_key(request: ScannerUniverseRequest) -> str:
 def _load_universe_items(request: ScannerUniverseRequest) -> List[dict]:
     min_price, max_price = _effective_price_bounds(request)
     universe_key = _universe_cache_key(
-        request.universeLimit, min_price, max_price, request.minAvgVol, request.minChangePct
+        SCANNER_UNIVERSE_LIMIT, min_price, max_price, request.minAvgVol, request.minChangePct
     )
     cached_universe = read_cache(universe_key)
     if cached_universe and isinstance(cached_universe, list):
         return cached_universe
 
     universe_items = _fetch_scanner_universe(
-        universe_limit=request.universeLimit,
+        universe_limit=SCANNER_UNIVERSE_LIMIT,
         min_price=min_price,
         max_price=max_price,
         min_avg_vol=request.minAvgVol,
@@ -1130,10 +1143,10 @@ def _day_gainers_cache_key(request: DayGainersRequest) -> str:
     interval, period = _validate_intraday_request(request)
     return (
         "md:scanner:day_gainers:"
-        f"u={request.universeLimit}:minP={min_price}:maxP={max_price}:"
+        f"u={SCANNER_UNIVERSE_LIMIT}:minP={min_price}:maxP={max_price}:"
         f"minV={request.minAvgVol}:minChg={request.minChangePct}:"
         f"int={interval}:per={period}:prepost={int(request.prepost)}:"
-        f"minTodayV={request.minTodayVolume}:limit={request.limit}:"
+        f"minTodayV={request.minTodayVolume}:resLimit={SCANNER_RESULTS_LIMIT}:"
         f"relM={REL_VOL_METHOD}:relInt={REL_VOL_INTERVAL}:relHistD={REL_VOL_HISTORY_DAYS}:"
         f"relBaseD={REL_VOL_BASELINE_DAYS}:relK={REL_VOL_K_BARS}:"
         f"relInclT={int(REL_VOL_BASELINE_INCLUDE_TODAY)}:relExclK={int(REL_VOL_BASELINE_EXCLUDE_LAST_K)}"
@@ -1202,7 +1215,7 @@ def scan_day_gainers(request: DayGainersRequest) -> dict:
     payload = {
         "scanner": "day_gainers",
         "sorted_by": "change_pct desc, relative_volume desc, volume desc",
-        "results": results[: max(request.limit, 0)],
+        "results": results[:SCANNER_RESULTS_LIMIT],
     }
     write_cache(cache_key, payload)
     return payload
@@ -1215,7 +1228,7 @@ def scan_hod_vwap_momentum(request: HodVwapMomentumRequest) -> dict:
         request,
         f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:"
         f"maxDistToHod={request.maxDistToHod}:reqHod={int(request.requireHodBreak)}:"
-        f"reqVwap={int(request.requireVwapBreak)}:limit={request.limit}",
+        f"reqVwap={int(request.requireVwapBreak)}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
@@ -1333,7 +1346,7 @@ def scan_hod_vwap_momentum(request: HodVwapMomentumRequest) -> dict:
     payload = {
         "scanner": "hod_vwap_momentum",
         "sorted_by": "break_type desc, price_change_pct desc, relative_volume desc",
-        "results": results[: request.limit],
+        "results": results[:SCANNER_RESULTS_LIMIT],
     }
     write_cache(cache_key, payload)
     return payload
@@ -1345,7 +1358,7 @@ def scan_hod_breakouts(request: HodBreakoutsRequest) -> dict:
         "hod_breakouts",
         request,
         f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:"
-        f"maxDistToHod={request.maxDistToHod}:limit={request.limit}",
+        f"maxDistToHod={request.maxDistToHod}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
@@ -1380,7 +1393,7 @@ def scan_vwap_breakouts(request: VwapBreakoutsRequest) -> dict:
     cache_key = _scan_cache_key(
         "vwap_breakouts",
         request,
-        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:limit={request.limit}",
+        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
@@ -1422,7 +1435,7 @@ def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
     cache_key = _scan_cache_key(
         "volume_spikes",
         request,
-        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:limit={request.limit}",
+        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
@@ -1485,7 +1498,7 @@ def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
     payload = {
         "scanner": "volume_spikes",
         "sorted_by": "relative_volume desc, price_change_pct desc",
-        "results": results[: request.limit],
+        "results": results[:SCANNER_RESULTS_LIMIT],
     }
     write_cache(cache_key, payload)
     return payload
@@ -1499,7 +1512,7 @@ def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
         f"minP={request.minSetupPrice}:maxP={request.maxSetupPrice}:minVol={request.minTodayVolume}:"
         f"minRange={request.minRangePct}:pos={request.minPosInRange}-{request.maxPosInRange}:"
         f"maxVwap={request.maxAbsVwapDistance}:maxHod={request.maxDistToHod}:minRelVol={request.minRelVol}:"
-        f"adaptive={int(request.adaptiveThresholds)}:limit={request.limit}",
+        f"adaptive={int(request.adaptiveThresholds)}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
@@ -1601,7 +1614,7 @@ def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
     payload = {
         "scanner": "hod_vwap_approach",
         "sorted_by": "distance_to_hod asc, abs(vwap_distance) asc, relative_volume desc",
-        "results": results[: request.limit],
+        "results": results[:SCANNER_RESULTS_LIMIT],
     }
     write_cache(cache_key, payload)
     return payload
@@ -1615,7 +1628,7 @@ def scan_hod_approach(request: HodApproachRequest) -> dict:
         f"minP={request.minSetupPrice}:maxP={request.maxSetupPrice}:minVol={request.minTodayVolume}:"
         f"minRange={request.minRangePct}:pos={request.minPosInRange}-{request.maxPosInRange}:"
         f"maxHod={request.maxDistToHod}:minRelVol={request.minRelVol}:adaptive={int(request.adaptiveThresholds)}:"
-        f"limit={request.limit}",
+        f"resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
@@ -1653,7 +1666,7 @@ def scan_vwap_approach(request: VwapApproachRequest) -> dict:
         f"minP={request.minSetupPrice}:maxP={request.maxSetupPrice}:minVol={request.minTodayVolume}:"
         f"minRange={request.minRangePct}:pos={request.minPosInRange}-{request.maxPosInRange}:"
         f"maxVwap={request.maxAbsVwapDistance}:minRelVol={request.minRelVol}:adaptive={int(request.adaptiveThresholds)}:"
-        f"limit={request.limit}",
+        f"resLimit={SCANNER_RESULTS_LIMIT}",
     )
     cached = read_cache(cache_key)
     if cached:
