@@ -891,8 +891,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         </div>
 
                         <div className="shrink-0 border-t border-border/60 bg-card/60 px-3 py-2 pr-6">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="w-full text-xs text-muted-foreground sm:w-auto">
                               {totalRows === 0
                                 ? '0 rows'
                                 : `${currentPageIndex * pageSize + 1}-${Math.min(
@@ -900,7 +900,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                     totalRows
                                   )} of ${totalRows.toLocaleString()}`}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                               <Button
                                 variant="outline"
                                 size="sm"
