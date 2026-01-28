@@ -11,6 +11,13 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 app = FastAPI(title="Market Data Service")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -20,11 +27,46 @@ HOD_APPROACH_DEFAULT_MAX_DIST_PCT = 2.0
 HOD_APPROACH_ADAPTIVE_CAP_PCT = 2.5
 VWAP_APPROACH_DEFAULT_MAX_DIST_PCT = 1.7
 VWAP_APPROACH_ADAPTIVE_CAP_PCT = 1.75
+
+REL_VOL_METHOD = (os.getenv("REL_VOL_METHOD", "recent_k_1m") or "recent_k_1m").strip().lower()
+
+REL_VOL_INTERVAL = (os.getenv("REL_VOL_INTERVAL", "1m") or "1m").strip()
+if REL_VOL_INTERVAL not in {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}:
+    REL_VOL_INTERVAL = "1m"
+
 try:
-    REL_VOL_TOD_DAYS = int(os.getenv("REL_VOL_TOD_DAYS", "10"))
+    REL_VOL_HISTORY_DAYS = int(os.getenv("REL_VOL_HISTORY_DAYS", "2"))
 except ValueError:
-    REL_VOL_TOD_DAYS = 10
-REL_VOL_TOD_DAYS = max(REL_VOL_TOD_DAYS, 0)
+    REL_VOL_HISTORY_DAYS = 2
+REL_VOL_HISTORY_DAYS = max(0, REL_VOL_HISTORY_DAYS)
+
+try:
+    REL_VOL_BASELINE_DAYS = int(os.getenv("REL_VOL_BASELINE_DAYS", "1"))
+except ValueError:
+    REL_VOL_BASELINE_DAYS = 1
+REL_VOL_BASELINE_DAYS = max(0, REL_VOL_BASELINE_DAYS)
+
+try:
+    REL_VOL_K_BARS = int(os.getenv("REL_VOL_K_BARS", "5"))
+except ValueError:
+    REL_VOL_K_BARS = 5
+REL_VOL_K_BARS = max(1, REL_VOL_K_BARS)
+
+REL_VOL_BASELINE_INCLUDE_TODAY = (os.getenv("REL_VOL_BASELINE_INCLUDE_TODAY", "1") or "1").strip() not in {
+    "0",
+    "false",
+    "False",
+}
+REL_VOL_BASELINE_EXCLUDE_LAST_K = (os.getenv("REL_VOL_BASELINE_EXCLUDE_LAST_K", "1") or "1").strip() not in {
+    "0",
+    "false",
+    "False",
+}
+REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD = (os.getenv("REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD", "1") or "1").strip() not in {
+    "0",
+    "false",
+    "False",
+}
 
 INTRADAY_MAX_DAYS_BY_INTERVAL = {"1m": 7}
 
@@ -341,6 +383,16 @@ def _intraday_max_days(interval: str) -> int:
     return INTRADAY_MAX_DAYS_BY_INTERVAL.get(interval, 60)
 
 
+def _period_days(period: str) -> Optional[int]:
+    p = (period or "").strip().lower()
+    if not p.endswith("d"):
+        return None
+    try:
+        return int(p.removesuffix("d"))
+    except ValueError:
+        return None
+
+
 def _rel_vol_tod_period_days(lookback_days: int, interval: str) -> int:
     if lookback_days <= 0:
         return 0
@@ -433,6 +485,113 @@ def _compute_rel_vol_tod(df: pd.DataFrame, lookback_days: int) -> dict:
             "todayCumVol": int(today_cum_vol),
             "baselineCumVol": baseline_cum_vol,
             "barIndex": int(len(today_df) - 1),
+            "barTime": last_ts.strftime("%H:%M"),
+        }
+    )
+    return result
+
+
+def _compute_rvol_recent_k_1m(
+    df: pd.DataFrame,
+    baseline_days: int,
+    k_bars: int,
+    include_today: bool,
+    exclude_last_k_from_today: bool,
+) -> dict:
+    result = {
+        "relVol": None,
+        "relVolTod": None,
+        "todayBarVol": None,  # sum of last K 1m bars
+        "baselineBarVol": None,  # expected sum of last K 1m bars
+        "todayCumVol": None,
+        "baselineCumVol": None,
+        "barIndex": None,
+        "barTime": None,
+    }
+    if df is None or df.empty or baseline_days <= 0 or k_bars <= 0:
+        return result
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return result
+
+    df = _df_to_et(df)
+    if df is None or df.empty:
+        return result
+
+    df_reg = _between_time(df, "09:30", "16:00")
+    if df_reg is None or df_reg.empty:
+        return result
+
+    df_reg = df_reg.sort_index()
+    grouped = {date: day_df for date, day_df in df_reg.groupby(df_reg.index.date) if not day_df.empty}
+    if not grouped:
+        return result
+
+    dates = sorted(grouped.keys())
+    today_date = dates[-1]
+    today_df = grouped.get(today_date)
+    if today_df is None or today_df.empty:
+        return result
+
+    today_df = today_df.sort_index()
+    last_ts = today_df.index[-1]
+
+    today_vol_series = today_df["Volume"].fillna(0)
+    if today_vol_series.empty:
+        return result
+
+    k = min(int(k_bars), int(len(today_vol_series)))
+    if k <= 0:
+        return result
+
+    bar_index = int(len(today_df) - 1)
+    today_k_vol = float(today_vol_series.tail(k).sum())
+    today_cum_vol = float(today_vol_series.sum())
+
+    baseline_frames: List[pd.DataFrame] = []
+    prior_dates = dates[:-1]
+    if baseline_days > 0 and prior_dates:
+        for date in prior_dates[-baseline_days:]:
+            day_df = grouped.get(date)
+            if day_df is not None and not day_df.empty:
+                baseline_frames.append(day_df.sort_index())
+
+    if include_today:
+        if exclude_last_k_from_today and len(today_df) > k:
+            baseline_frames.append(today_df.iloc[:-k].sort_index())
+        else:
+            baseline_frames.append(today_df)
+
+    baseline_1m_avg = None
+    if baseline_frames:
+        baseline_df = pd.concat(baseline_frames, axis=0)
+        if baseline_df is not None and not baseline_df.empty:
+            baseline_vols = baseline_df["Volume"].fillna(0)
+            if not baseline_vols.empty:
+                baseline_1m_avg = float(baseline_vols.mean())
+
+    baseline_k_vol = None
+    baseline_cum_vol = None
+    rel_vol = None
+    rel_vol_tod = None
+    if baseline_1m_avg is not None and baseline_1m_avg > 0:
+        baseline_k_vol = baseline_1m_avg * k
+        if baseline_k_vol > 0:
+            rel_vol = today_k_vol / baseline_k_vol
+
+        minutes_elapsed = float(len(today_vol_series))
+        baseline_cum_vol = baseline_1m_avg * minutes_elapsed
+        if baseline_cum_vol > 0:
+            rel_vol_tod = today_cum_vol / baseline_cum_vol
+
+    result.update(
+        {
+            "relVol": rel_vol,
+            "relVolTod": rel_vol_tod,
+            "todayBarVol": int(today_k_vol),
+            "baselineBarVol": baseline_k_vol,
+            "todayCumVol": int(today_cum_vol),
+            "baselineCumVol": baseline_cum_vol,
+            "barIndex": bar_index,
             "barTime": last_ts.strftime("%H:%M"),
         }
     )
@@ -680,7 +839,9 @@ def _features_cache_key(request: ScannerUniverseRequest) -> str:
         f"u={request.universeLimit}:minP={min_price}:maxP={max_price}:"
         f"minV={request.minAvgVol}:minChg={request.minChangePct}:"
         f"int={interval}:per={period}:prepost={int(request.prepost)}:slopeN={request.closeSlopeN}:"
-        f"relTodDays={REL_VOL_TOD_DAYS}"
+        f"relM={REL_VOL_METHOD}:relInt={REL_VOL_INTERVAL}:relHistD={REL_VOL_HISTORY_DAYS}:"
+        f"relBaseD={REL_VOL_BASELINE_DAYS}:relK={REL_VOL_K_BARS}:"
+        f"relInclT={int(REL_VOL_BASELINE_INCLUDE_TODAY)}:relExclK={int(REL_VOL_BASELINE_EXCLUDE_LAST_K)}"
     )
 
 
@@ -710,20 +871,37 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
     tickers = [x["ticker"] for x in universe_items if x.get("ticker")]
     meta = {x["ticker"]: x for x in universe_items if x.get("ticker")}
 
-    frames = _download_intraday(tickers, interval=interval, period=period, prepost=bool(request.prepost))
-    rel_vol_tod_frames: dict[str, pd.DataFrame] = {}
-    if REL_VOL_TOD_DAYS > 0 and tickers:
-        rel_vol_tod_period_days = _rel_vol_tod_period_days(REL_VOL_TOD_DAYS, interval)
-        if rel_vol_tod_period_days > 0:
+    period_for_frames = period
+    if (
+        REL_VOL_METHOD == "recent_k_1m"
+        and REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD
+        and interval == "1m"
+        and REL_VOL_HISTORY_DAYS > 1
+    ):
+        primary_days = _period_days(period_for_frames) or 0
+        if primary_days < REL_VOL_HISTORY_DAYS:
+            period_for_frames = f"{REL_VOL_HISTORY_DAYS}d"
+
+    frames = _download_intraday(tickers, interval=interval, period=period_for_frames, prepost=bool(request.prepost))
+
+    rel_vol_frames: dict[str, pd.DataFrame] = {}
+    if REL_VOL_METHOD == "recent_k_1m" and tickers and REL_VOL_HISTORY_DAYS > 0 and REL_VOL_BASELINE_DAYS > 0:
+        if (
+            REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD
+            and interval == "1m"
+            and ((_period_days(period_for_frames) or 0) >= REL_VOL_HISTORY_DAYS)
+        ):
+            rel_vol_frames = frames
+        else:
             try:
-                rel_vol_tod_frames = _download_intraday(
+                rel_vol_frames = _download_intraday(
                     tickers,
-                    interval=interval,
-                    period=f"{rel_vol_tod_period_days}d",
+                    interval=REL_VOL_INTERVAL,
+                    period=f"{REL_VOL_HISTORY_DAYS}d",
                     prepost=False,
                 )
             except HTTPException:
-                rel_vol_tod_frames = {}
+                rel_vol_frames = {}
     features: List[dict] = []
 
     for ticker in tickers:
@@ -763,11 +941,14 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
 
         last_price = regular_close or _last_close(df_today) or _safe_float(m.get("last"))
 
-        rel_vol = None
-        if avg_daily_vol_f and avg_daily_vol_f > 0:
-            rel_vol = reg_vol / avg_daily_vol_f
-
-        rel_vol_tod_fields = _compute_rel_vol_tod(rel_vol_tod_frames.get(ticker), REL_VOL_TOD_DAYS)
+        rel_vol_fields = _compute_rvol_recent_k_1m(
+            rel_vol_frames.get(ticker),
+            baseline_days=REL_VOL_BASELINE_DAYS,
+            k_bars=REL_VOL_K_BARS,
+            include_today=REL_VOL_BASELINE_INCLUDE_TODAY,
+            exclude_last_k_from_today=REL_VOL_BASELINE_EXCLUDE_LAST_K,
+        )
+        rel_vol = _safe_float(rel_vol_fields.get("relVol"))
 
         hod = _safe_float(df_reg["High"].max()) if df_reg is not None and not df_reg.empty else None
         lod = _safe_float(df_reg["Low"].min()) if df_reg is not None and not df_reg.empty else None
@@ -832,11 +1013,13 @@ def _compute_features(request: ScannerUniverseRequest) -> dict:
                 "posInRange": pos_in_range,
                 "distToHod": dist_to_hod,
                 "relVol": rel_vol,
-                "relVolTod": rel_vol_tod_fields.get("relVolTod"),
-                "todayCumVol": rel_vol_tod_fields.get("todayCumVol"),
-                "baselineCumVol": rel_vol_tod_fields.get("baselineCumVol"),
-                "barIndex": rel_vol_tod_fields.get("barIndex"),
-                "barTime": rel_vol_tod_fields.get("barTime"),
+                "relVolTod": rel_vol_fields.get("relVolTod"),
+                "todayCumVol": rel_vol_fields.get("todayCumVol"),
+                "baselineCumVol": rel_vol_fields.get("baselineCumVol"),
+                "todayBarVol": rel_vol_fields.get("todayBarVol"),
+                "baselineBarVol": rel_vol_fields.get("baselineBarVol"),
+                "barIndex": rel_vol_fields.get("barIndex"),
+                "barTime": rel_vol_fields.get("barTime"),
                 "closeSlopeN": close_slope_n,
                 "atr": atr_val,
                 "intradayVol": intraday_vol,
@@ -950,7 +1133,10 @@ def _day_gainers_cache_key(request: DayGainersRequest) -> str:
         f"u={request.universeLimit}:minP={min_price}:maxP={max_price}:"
         f"minV={request.minAvgVol}:minChg={request.minChangePct}:"
         f"int={interval}:per={period}:prepost={int(request.prepost)}:"
-        f"minTodayV={request.minTodayVolume}:limit={request.limit}:relTodDays={REL_VOL_TOD_DAYS}"
+        f"minTodayV={request.minTodayVolume}:limit={request.limit}:"
+        f"relM={REL_VOL_METHOD}:relInt={REL_VOL_INTERVAL}:relHistD={REL_VOL_HISTORY_DAYS}:"
+        f"relBaseD={REL_VOL_BASELINE_DAYS}:relK={REL_VOL_K_BARS}:"
+        f"relInclT={int(REL_VOL_BASELINE_INCLUDE_TODAY)}:relExclK={int(REL_VOL_BASELINE_EXCLUDE_LAST_K)}"
     )
 
 

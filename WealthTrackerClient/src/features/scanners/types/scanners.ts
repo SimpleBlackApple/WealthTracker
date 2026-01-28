@@ -193,7 +193,7 @@ export const SCANNERS = [
       },
       {
         key: 'relative_volume',
-        header: 'Rel Vol',
+        header: 'RVOL (1m)',
         align: 'right',
         getValue: r => r.relative_volume ?? null,
       },
@@ -239,7 +239,7 @@ export const SCANNERS = [
       },
       {
         key: 'relative_volume',
-        header: 'Rel Vol',
+        header: 'RVOL (1m)',
         align: 'right',
         getValue: r => r.relative_volume ?? null,
       },
@@ -301,7 +301,7 @@ export const SCANNERS = [
       },
       {
         key: 'relative_volume',
-        header: 'Rel Vol',
+        header: 'RVOL (1m)',
         align: 'right',
         getValue: r => r.relative_volume ?? null,
       },
@@ -345,7 +345,7 @@ export const SCANNERS = [
       },
       {
         key: 'relative_volume',
-        header: 'Rel Vol',
+        header: 'RVOL (1m)',
         align: 'right',
         getValue: r => r.relative_volume ?? null,
       },
@@ -391,7 +391,7 @@ export const SCANNERS = [
       },
       {
         key: 'relative_volume',
-        header: 'Rel Vol',
+        header: 'RVOL (1m)',
         align: 'right',
         getValue: r => r.relative_volume ?? null,
       },
@@ -437,7 +437,7 @@ export const SCANNERS = [
       },
       {
         key: 'relative_volume',
-        header: 'Rel Vol',
+        header: 'RVOL (1m)',
         align: 'right',
         getValue: r => r.relative_volume ?? null,
       },

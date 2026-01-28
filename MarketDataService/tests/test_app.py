@@ -56,11 +56,13 @@ class TestMarketDataHelpers(unittest.TestCase):
         self.assertEqual(min_price, app.MIN_PRICE_FLOOR)
         self.assertEqual(max_price, app.MIN_PRICE_FLOOR)
 
-    def test_rel_vol_tod_period_days(self):
-        self.assertEqual(app._rel_vol_tod_period_days(0, "5m"), 0)
-        self.assertEqual(app._rel_vol_tod_period_days(10, "5m"), 15)
+    def test_period_days(self):
+        self.assertEqual(app._period_days("2d"), 2)
+        self.assertEqual(app._period_days(" 5D "), 5)
+        self.assertIsNone(app._period_days("1w"))
+        self.assertIsNone(app._period_days("bad"))
 
-    def test_compute_rel_vol_tod(self):
+    def test_compute_rvol_recent_k_1m(self):
         tz = ZoneInfo("America/New_York")
         idx = pd.DatetimeIndex(
             [
@@ -81,9 +83,18 @@ class TestMarketDataHelpers(unittest.TestCase):
             index=idx,
         )
 
-        result = app._compute_rel_vol_tod(df, lookback_days=1)
+        result = app._compute_rvol_recent_k_1m(
+            df,
+            baseline_days=1,
+            k_bars=2,
+            include_today=False,
+            exclude_last_k_from_today=True,
+        )
+        self.assertEqual(result["todayBarVol"], 400)
         self.assertEqual(result["todayCumVol"], 400)
+        self.assertEqual(result["baselineBarVol"], 200.0)
         self.assertAlmostEqual(result["relVolTod"], 2.0, places=6)
+        self.assertAlmostEqual(result["relVol"], 2.0, places=6)
         self.assertEqual(result["barTime"], "10:05")
 
 
