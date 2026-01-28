@@ -959,8 +959,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
                     {selectedSymbol && (
                       <ResizablePanel defaultSize={40} minSize={20}>
-                        <div className="relative h-[700px] bg-muted/20">
-                          <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+                        <div className="flex h-[700px] flex-col bg-muted/20">
+                          <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-3 py-2">
                             <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1 shadow-sm backdrop-blur">
                               <StockSymbolBadge
                                 symbol={selectedSymbol.symbol}
@@ -969,22 +969,22 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                 {selectedSymbol.symbol}
                               </span>
                             </div>
-                          </div>
-                          <div className="absolute right-3 top-3 z-20 flex gap-2">
                             <Button
                               variant="secondary"
                               size="icon"
-                              className="h-7 w-7 rounded-full bg-background/80 shadow-sm backdrop-blur hover:bg-background"
+                              className="h-7 w-7 rounded-full shadow-sm"
                               onClick={() => setSelectedSymbol(null)}
                               title="Close chart"
                             >
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          <TradingViewChart
-                            symbol={selectedSymbol.symbol}
-                            exchange={selectedSymbol.exchange}
-                          />
+                          <div className="flex-1">
+                            <TradingViewChart
+                              symbol={selectedSymbol.symbol}
+                              exchange={selectedSymbol.exchange}
+                            />
+                          </div>
                         </div>
                       </ResizablePanel>
                     )}
