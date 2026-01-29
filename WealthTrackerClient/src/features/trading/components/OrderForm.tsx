@@ -160,7 +160,7 @@ export function OrderForm({
             description: `${tx.type.toUpperCase()} ${tx.quantity} ${tx.symbol} @ ${toMoney(tx.price)} • Fees ${toMoney(tx.fee)}`,
             variant:
               status === 'executed'
-                ? 'success'
+                ? (tx.type === 'sell' || tx.type === 'short' ? 'destructive' : 'success')
                 : status === 'cancelled'
                   ? 'warning'
                   : status === 'failed'

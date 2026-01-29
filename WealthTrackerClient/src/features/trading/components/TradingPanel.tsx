@@ -7,10 +7,6 @@ import { usePortfolioSummary } from '../hooks/usePortfolio'
 import { useOrderNotifications } from '../hooks/useOrderNotifications'
 import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 import { OrderForm } from './OrderForm'
-import { PortfolioSummary } from './PortfolioSummary'
-import { PositionsList } from './PositionsList'
-import { TransactionHistory } from './TransactionHistory'
-import { OpenOrdersList } from './OpenOrdersList'
 
 interface TradingPanelProps {
   symbol: string
@@ -34,24 +30,18 @@ export function TradingPanel({
   currentPrice,
   priceTimestamp,
 }: TradingPanelProps) {
-  const { activePortfolioId, activeView, setActiveView } = useTradingContext()
+  const { activePortfolioId } = useTradingContext()
   const portfoliosQuery = usePortfolios()
   const portfolios = portfoliosQuery.data ?? []
 
   const resolvedPortfolioId =
     activePortfolioId ?? (portfolios.length > 0 ? portfolios[0].id : null)
 
-  const activePortfolio = useMemo(
-    () => portfolios.find(p => p.id === resolvedPortfolioId) ?? null,
-    [portfolios, resolvedPortfolioId]
-  )
-
   const summaryQuery = usePortfolioSummary(resolvedPortfolioId)
-  const goToPortfolio = () => setActiveView('portfolio')
 
   useOrderNotifications({
     portfolioId: resolvedPortfolioId,
-    onGoToPortfolio: goToPortfolio,
+    onGoToPortfolio: () => { }, // Handled by separate page now
   })
 
   const [now, setNow] = useState(() => Date.now())
@@ -65,65 +55,15 @@ export function TradingPanel({
     const summary = summaryQuery.data
     if (!summary) return { realized: 0, unrealized: 0 }
 
-    // Calculate unrealized P&L from positions
     const unrealized = summary.positions.reduce((sum, pos) => {
       return sum + (pos.unrealizedPL ?? 0)
     }, 0)
 
-    // Note: We don't have today's realized P&L separately, so using 0 for now
-    const realized = 0
+    const realized = 0 // Mocked for now
 
     return { realized, unrealized }
   }, [summaryQuery.data])
 
-  // Show different views based on activeView
-  if (activeView === 'portfolio') {
-    return (
-      <div className="space-y-3 p-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Portfolio View</h3>
-          <button
-            type="button"
-            onClick={() => setActiveView('trade')}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Back to Trade
-          </button>
-        </div>
-        <PortfolioSummary
-          portfolio={activePortfolio}
-          summary={summaryQuery.data ?? null}
-          isLoading={summaryQuery.isLoading}
-          error={summaryQuery.error as Error | null}
-        />
-        <PositionsList positions={summaryQuery.data?.positions ?? []} />
-        <OpenOrdersList
-          portfolioId={resolvedPortfolioId}
-          onGoToPortfolio={goToPortfolio}
-        />
-      </div>
-    )
-  }
-
-  if (activeView === 'history') {
-    return (
-      <div className="space-y-3 p-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Order History</h3>
-          <button
-            type="button"
-            onClick={() => setActiveView('trade')}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Back to Trade
-          </button>
-        </div>
-        <TransactionHistory portfolioId={resolvedPortfolioId} />
-      </div>
-    )
-  }
-
-  // Trade view (default)
   return (
     <div className="flex h-full flex-col">
       {/* Header with symbol, price info and P&L - ultra compact */}
@@ -190,7 +130,7 @@ export function TradingPanel({
           symbol={symbol}
           exchange={exchange}
           currentPrice={currentPrice}
-          onGoToPortfolio={goToPortfolio}
+          onGoToPortfolio={() => { }} // Handled by navigation now
         />
       </div>
     </div>

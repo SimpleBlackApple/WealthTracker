@@ -1,12 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { LoginButton } from '@/features/auth/components/LoginButton'
 import { AuthCallback } from '@/features/auth/components/AuthCallback'
-import { useAuthGuard } from '@/features/auth/hooks/useAuthGuard'
 import { AppShell } from '@/components/layout/AppShell'
 import { ScannersPage } from '@/features/scanners/pages/ScannersPage'
 import { TradingProvider } from '@/features/trading/contexts/TradingContext'
+import { PortfolioPage } from '@/features/trading/pages/PortfolioPage'
 
 function LoginPage() {
   return (
@@ -21,15 +20,15 @@ function LoginPage() {
           <div className="space-y-8">
             <div className="inline-flex items-center gap-3 rounded-full border border-border/60 bg-card/60 px-4 py-2 text-[11px] uppercase tracking-[0.32em] text-muted-foreground">
               <span className="h-2 w-2 rounded-full bg-primary/70" />
-              Market Signal Desk
+              Autonomous Trading Desk
             </div>
             <div className="space-y-4">
               <h1 className="font-display text-4xl leading-tight sm:text-5xl">
-                WealthTracker
+                FluxTerminal
               </h1>
               <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
-                A modern market scanner built for decisive moves, combining
-                momentum, volume, and volatility in one surface.
+                The high-velocity market interface for pro traders.
+                Streamlined, precise, and built for the modern edge.
               </p>
             </div>
             <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
@@ -82,25 +81,6 @@ function LoginPage() {
   )
 }
 
-function ProtectedPage() {
-  useAuthGuard(true)
-  const { user } = useAuthStore()
-
-  return (
-    <div className="rounded-lg border bg-card p-6">
-      <h2 className="text-lg font-semibold">
-        Welcome, {user?.name || 'User'}!
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Use the Scanners page to explore market opportunities.
-      </p>
-      <div className="mt-4 text-sm text-muted-foreground">
-        <div>Email: {user?.email}</div>
-        <div>User ID: {user?.id}</div>
-      </div>
-    </div>
-  )
-}
 
 function App() {
   const { isAuthenticated } = useAuth()
@@ -123,10 +103,11 @@ function App() {
       >
         <Route
           index
-          element={<Navigate to="/scanners/day-gainers" replace />}
+          element={<Navigate to="/scanners" replace />}
         />
+        <Route path="scanners" element={<Navigate to="/scanners/day-gainers" replace />} />
         <Route path="scanners/:scannerId" element={<ScannersPage />} />
-        <Route path="account" element={<ProtectedPage />} />
+        <Route path="portfolio" element={<PortfolioPage />} />
       </Route>
     </Routes>
   )

@@ -16,6 +16,7 @@ interface AuthState {
   loginWithGoogle: (code: string, redirectUri: string) => Promise<void>
   logout: () => Promise<void>
   restoreAuth: () => void
+  updateUser: (user: User) => void
 }
 
 // Helper function to get initial auth state from localStorage synchronously
@@ -147,5 +148,9 @@ export const useAuthStore = create<AuthState>(set => ({
         useAuthStore.getState().clearAuth()
       }
     }
+  },
+  updateUser: (user) => {
+    localStorage.setItem('user', JSON.stringify(user))
+    set({ user })
   },
 }))

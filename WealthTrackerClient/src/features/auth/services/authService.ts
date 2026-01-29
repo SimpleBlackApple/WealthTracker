@@ -120,6 +120,13 @@ class AuthService {
     await this.authInstance.post('/auth/logout', { refreshToken })
   }
 
+  async updateUserName(id: number, name: string): Promise<any> {
+    const userResponse = await this.axiosInstance.get(`/User/${id}`)
+    const user = userResponse.data
+    user.name = name
+    return await this.axiosInstance.put(`/User/${id}`, user)
+  }
+
   getAxiosInstance(): AxiosInstance {
     return this.axiosInstance
   }
