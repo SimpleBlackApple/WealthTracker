@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { useCancelOrder, useOpenOrders } from '../hooks/useOrders'
 
@@ -51,7 +52,7 @@ export function OpenOrdersList({
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody striped={false}>
             {query.isLoading ? (
               <TableRow>
                 <TableCell
@@ -71,53 +72,72 @@ export function OpenOrdersList({
                 </TableCell>
               </TableRow>
             ) : (
-              orders.map(o => (
-                <TableRow key={o.id}>
-                  <TableCell className="font-medium">{o.symbol}</TableCell>
-                  <TableCell className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {o.type}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {o.orderType}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {o.quantity}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(o.limitPrice)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(o.stopPrice)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={portfolioId == null || cancel.isPending}
-                      onClick={() => {
-                        if (!portfolioId) return
-                        cancel.mutate(
-                          { orderId: o.id, portfolioId },
-                          {
-                            onSuccess: () => {
-                              toast({
-                                title: 'Order cancelled',
-                                description: `${o.type.toUpperCase()} ${o.quantity} ${o.symbol} • ${o.orderType}`,
-                                variant: 'warning',
-                                sound: 'warning',
-                                actionLabel: 'View portfolio',
-                                onClick: () => onGoToPortfolio?.(),
-                              })
-                            },
-                          }
-                        )
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              orders.map(o => {
+                const type = String(o.type ?? '').trim().toLowerCase()
+                const isBuy = type === 'buy' || type === 'cover'
+                const isSell = type === 'sell' || type === 'short'
+
+                return (
+                  <TableRow
+                    key={o.id}
+                    className={cn(
+                      "transition-colors",
+                      isBuy && "bg-gain/20 hover:bg-gain/30",
+                      isSell && "bg-loss/10 hover:bg-loss/20"
+                    )}
+                  >
+                    <TableCell className="font-bold">{o.symbol}</TableCell>
+                    <TableCell>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                        isBuy ? "bg-gain/20 text-gain" : "bg-loss/20 text-loss"
+                      )}>
+                        {o.type}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">
+                      {o.orderType}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {o.quantity}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {money(o.limitPrice)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {money(o.stopPrice)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-loss hover:bg-loss/10"
+                        disabled={portfolioId == null || cancel.isPending}
+                        onClick={() => {
+                          if (!portfolioId) return
+                          cancel.mutate(
+                            { orderId: o.id, portfolioId },
+                            {
+                              onSuccess: () => {
+                                toast({
+                                  title: 'Order cancelled',
+                                  description: `${o.type.toUpperCase()} ${o.quantity} ${o.symbol} • ${o.orderType}`,
+                                  variant: 'warning',
+                                  sound: 'warning',
+                                  actionLabel: 'View portfolio',
+                                  onClick: () => onGoToPortfolio?.(),
+                                })
+                              },
+                            }
+                          )
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>

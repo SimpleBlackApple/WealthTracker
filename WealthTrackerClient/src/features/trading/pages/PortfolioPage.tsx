@@ -7,7 +7,7 @@ import { PositionsList } from '../components/PositionsList'
 import { TransactionHistory } from '../components/TransactionHistory'
 import { OpenOrdersList } from '../components/OpenOrdersList'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LayoutGrid, ListFilter, History, Clock } from 'lucide-react'
+import { LayoutGrid, History, Clock } from 'lucide-react'
 
 export function PortfolioPage() {
     const { activePortfolioId } = useTradingContext()

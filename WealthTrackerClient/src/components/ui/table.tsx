@@ -24,12 +24,17 @@ function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
   )
 }
 
-function TableBody({ className, ...props }: React.ComponentProps<'tbody'>) {
+function TableBody({
+  className,
+  striped = true,
+  ...props
+}: React.ComponentProps<'tbody'> & { striped?: boolean }) {
   return (
     <tbody
       data-slot="table-body"
       className={cn(
-        '[&_tr:last-child]:border-0 [&_tr:nth-child(even)]:bg-muted/30',
+        '[&_tr:last-child]:border-0',
+        striped && '[&_tr:nth-child(even)]:bg-muted/30',
         className
       )}
       {...props}
