@@ -88,13 +88,8 @@ export function TabsContent({
   if (context.value !== value) return null
 
   return (
-    <div
-      role="tabpanel"
-      className={cn('outline-none', className)}
-      {...props}
-    >
+    <div role="tabpanel" className={cn('outline-none', className)} {...props}>
       {children}
     </div>
   )
 }
-

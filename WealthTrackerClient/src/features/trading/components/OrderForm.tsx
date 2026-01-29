@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useToast } from '@/components/ui/toast'
 import { useExecuteTrade } from '../hooks/useTrades'
 import type { OrderType, TransactionType } from '../types/trading'
 
@@ -19,6 +20,7 @@ interface OrderFormProps {
   symbol: string
   exchange?: string | null
   currentPrice: number | null
+  onGoToPortfolio?: () => void
 }
 
 function toMoney(value: number) {
@@ -34,6 +36,7 @@ export function OrderForm({
   symbol,
   exchange,
   currentPrice,
+  onGoToPortfolio,
 }: OrderFormProps) {
   const [action, setAction] = useState<TransactionType>('buy')
   const [orderType, setOrderType] = useState<OrderType>('market')
@@ -41,9 +44,13 @@ export function OrderForm({
   const [limitPrice, setLimitPrice] = useState('')
   const [stopPrice, setStopPrice] = useState('')
 
+  const { toast } = useToast()
   const executeTrade = useExecuteTrade()
 
-  const qty = useMemo(() => Math.max(0, Math.trunc(Number(quantity) || 0)), [quantity])
+  const qty = useMemo(
+    () => Math.max(0, Math.trunc(Number(quantity) || 0)),
+    [quantity]
+  )
 
   const feeEstimate = useMemo(() => {
     if (!currentPrice || qty <= 0) return null
@@ -109,19 +116,57 @@ export function OrderForm({
       return
     }
 
-    executeTrade.mutate({
-      portfolioId: portfolioId as number,
-      request: {
-        symbol,
-        exchange: exchange || undefined,
-        type: action,
-        quantity: qty,
-        price: currentPrice as number,
-        orderType,
-        limitPrice: limit,
-        stopPrice: stop,
+    executeTrade.mutate(
+      {
+        portfolioId: portfolioId as number,
+        request: {
+          symbol,
+          exchange: exchange || undefined,
+          type: action,
+          quantity: qty,
+          price: currentPrice as number,
+          orderType,
+          limitPrice: limit,
+          stopPrice: stop,
+        },
       },
-    })
+      {
+        onSuccess: tx => {
+          const status = tx.status
+          toast({
+            title:
+              status === 'executed'
+                ? 'Order filled'
+                : status === 'pending'
+                  ? 'Order placed'
+                  : status === 'cancelled'
+                    ? 'Order cancelled'
+                    : status === 'failed'
+                      ? 'Order failed'
+                      : 'Order updated',
+            description: `${tx.type.toUpperCase()} ${tx.quantity} ${tx.symbol} @ ${toMoney(tx.price)} • Fees ${toMoney(tx.fee)}`,
+            variant:
+              status === 'executed'
+                ? 'success'
+                : status === 'cancelled'
+                  ? 'warning'
+                  : status === 'failed'
+                    ? 'destructive'
+                    : 'default',
+            sound:
+              status === 'executed'
+                ? 'success'
+                : status === 'cancelled'
+                  ? 'warning'
+                  : status === 'failed'
+                    ? 'error'
+                    : 'none',
+            actionLabel: 'View portfolio',
+            onClick: () => onGoToPortfolio?.(),
+          })
+        },
+      }
+    )
   }
 
   const errorMessage =
@@ -137,7 +182,9 @@ export function OrderForm({
           type="button"
           variant={action === 'buy' ? 'default' : 'outline'}
           onClick={() => setAction('buy')}
-          className={action === 'buy' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+          className={
+            action === 'buy' ? 'bg-emerald-600 hover:bg-emerald-700' : ''
+          }
         >
           Buy
         </Button>
@@ -153,7 +200,9 @@ export function OrderForm({
           type="button"
           variant={action === 'short' ? 'default' : 'outline'}
           onClick={() => setAction('short')}
-          className={action === 'short' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+          className={
+            action === 'short' ? 'bg-orange-600 hover:bg-orange-700' : ''
+          }
         >
           Short
         </Button>
@@ -298,7 +347,9 @@ export function OrderForm({
 
       {errorMessage && (
         <Alert variant="destructive">
-          <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
+          <AlertDescription className="text-xs">
+            {errorMessage}
+          </AlertDescription>
         </Alert>
       )}
 

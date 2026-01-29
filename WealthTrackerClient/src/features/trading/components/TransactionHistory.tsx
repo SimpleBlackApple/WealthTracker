@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { useTransactions } from '../hooks/useTrades'
 
 function money(value: number) {
@@ -12,7 +19,11 @@ function money(value: number) {
   })
 }
 
-export function TransactionHistory({ portfolioId }: { portfolioId: number | null }) {
+export function TransactionHistory({
+  portfolioId,
+}: {
+  portfolioId: number | null
+}) {
   const [page, setPage] = useState(1)
   const pageSize = 25
 
@@ -112,4 +123,3 @@ export function TransactionHistory({ portfolioId }: { portfolioId: number | null
     </div>
   )
 }
-

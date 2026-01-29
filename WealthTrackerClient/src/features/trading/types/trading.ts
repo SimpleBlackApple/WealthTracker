@@ -112,4 +112,3 @@ export interface ExecuteTradeRequest {
   limitPrice?: number
   stopPrice?: number
 }
-

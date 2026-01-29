@@ -80,4 +80,3 @@ class TradingService {
 }
 
 export const tradingService = new TradingService()
-

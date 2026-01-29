@@ -2,12 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { tradingService } from '../services/tradingService'
 
-export function useOpenOrders(portfolioId: number | null) {
+export function useOpenOrders(
+  portfolioId: number | null,
+  options?: { refetchInterval?: number | false }
+) {
   return useQuery({
     queryKey: ['orders', portfolioId],
     enabled: portfolioId != null,
     queryFn: () => tradingService.getOpenOrders(portfolioId as number),
     staleTime: 5_000,
+    refetchInterval: options?.refetchInterval,
     refetchOnWindowFocus: false,
   })
 }
@@ -22,7 +26,9 @@ export function useCancelOrder() {
     },
     onSuccess: async payload => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['orders', payload.portfolioId] }),
+        queryClient.invalidateQueries({
+          queryKey: ['orders', payload.portfolioId],
+        }),
         queryClient.invalidateQueries({
           queryKey: ['transactions', payload.portfolioId],
         }),
@@ -30,4 +36,3 @@ export function useCancelOrder() {
     },
   })
 }
-

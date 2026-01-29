@@ -50,34 +50,40 @@ if (!Element.prototype.scrollIntoView) {
 // Mock react-resizable-panels for JSDOM stability (resize observers + pointer events).
 vi.mock('react-resizable-panels', () => ({
   Group: (props: Record<string, unknown> & { children?: React.ReactNode }) => {
-    const {
-      children,
-      // panel-group specific props to strip
-      orientation: _orientation,
-      direction: _direction,
-      autoSaveId: _autoSaveId,
-      onLayout: _onLayout,
-      ...rest
-    } = props
+    const rest = { ...props } as Record<string, unknown> & {
+      children?: React.ReactNode
+    }
+    const children = rest.children
+    delete rest.children
+    delete rest.orientation
+    delete rest.direction
+    delete rest.autoSaveId
+    delete rest.onLayout
     return React.createElement('div', rest, children)
   },
   Panel: (props: Record<string, unknown> & { children?: React.ReactNode }) => {
-    const {
-      children,
-      // panel specific props to strip
-      defaultSize: _defaultSize,
-      minSize: _minSize,
-      maxSize: _maxSize,
-      collapsible: _collapsible,
-      collapsedSize: _collapsedSize,
-      order: _order,
-      onResize: _onResize,
-      ...rest
-    } = props
+    const rest = { ...props } as Record<string, unknown> & {
+      children?: React.ReactNode
+    }
+    const children = rest.children
+    delete rest.children
+    delete rest.defaultSize
+    delete rest.minSize
+    delete rest.maxSize
+    delete rest.collapsible
+    delete rest.collapsedSize
+    delete rest.order
+    delete rest.onResize
     return React.createElement('div', rest, children)
   },
-  Separator: (props: Record<string, unknown> & { children?: React.ReactNode }) => {
-    const { children, ...rest } = props
+  Separator: (
+    props: Record<string, unknown> & { children?: React.ReactNode }
+  ) => {
+    const rest = { ...props } as Record<string, unknown> & {
+      children?: React.ReactNode
+    }
+    const children = rest.children
+    delete rest.children
     return React.createElement('div', rest, children)
   },
 }))

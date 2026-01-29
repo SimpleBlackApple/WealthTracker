@@ -21,4 +21,3 @@ export function usePortfolioSummary(portfolioId: number | null) {
     refetchOnWindowFocus: false,
   })
 }
-

@@ -325,80 +325,93 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr] lg:items-stretch">
-      <Card className="h-full border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Scanners</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-1">
-          {SCANNERS.map(s => (
-            <NavLink
-              key={s.id}
-              to={`/scanners/${s.id}`}
-              className={({ isActive }) =>
-                cn(
-                  'rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground',
-                  isActive && 'bg-muted/60 font-semibold text-foreground'
-                )
-              }
-            >
-              <div className="leading-4">{s.title}</div>
-              <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                {s.description}
-              </div>
-            </NavLink>
-          ))}
-        </CardContent>
-      </Card>
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
+      <div className="grid gap-4 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:overflow-auto lg:pr-1">
+        <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Scanners</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-1">
+            {SCANNERS.map(s => (
+              <NavLink
+                key={s.id}
+                to={`/scanners/${s.id}`}
+                className={({ isActive }) =>
+                  cn(
+                    'rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground',
+                    isActive && 'bg-muted/60 font-semibold text-foreground'
+                  )
+                }
+              >
+                <div className="leading-4">{s.title}</div>
+                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                  {s.description}
+                </div>
+              </NavLink>
+            ))}
+          </CardContent>
+        </Card>
 
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="grid gap-1">
-            <h1 className="font-display text-xl">{definition.title}</h1>
-            <p className="text-sm text-muted-foreground">
-              {definition.description}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw
-                className={cn(
-                  'mr-2 h-4 w-4',
-                  query.isFetching && 'animate-spin'
-                )}
-              />
-              Refresh
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setDraftRequest(definition.defaultRequest)
-                setAppliedRequest(definition.defaultRequest)
-                setSort(definition.defaultSort)
-                setPageIndex(0)
-                setSymbolFilter('')
-              }}
-            >
-              Reset
-            </Button>
+        <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">
+              Scanner actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2">
             <Button
               onClick={() => {
                 setPageIndex(0)
                 setAppliedRequest(draftRequest)
               }}
               disabled={query.isFetching}
+              className="w-full"
             >
               Run
             </Button>
-          </div>
-        </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => query.refetch()}
+                disabled={query.isFetching}
+                className="w-full"
+              >
+                <RefreshCw
+                  className={cn(
+                    'mr-2 h-4 w-4',
+                    query.isFetching && 'animate-spin'
+                  )}
+                />
+                Refresh
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDraftRequest(definition.defaultRequest)
+                  setAppliedRequest(definition.defaultRequest)
+                  setSort(definition.defaultSort)
+                  setPageIndex(0)
+                  setSymbolFilter('')
+                }}
+                className="w-full"
+              >
+                Reset
+              </Button>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
+              {query.dataUpdatedAt > 0 && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {new Date(query.dataUpdatedAt).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-          <CardContent className="grid gap-3 p-4">
+          <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.32em] text-muted-foreground">
@@ -415,14 +428,10 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   {appliedFilterCount} applied
                 </span>
               </div>
-              <div className="text-xs text-muted-foreground">
-                <span className="hidden sm:inline">
-                  Scroll to reveal filters
-                </span>
-                <span className="sm:hidden">Tap to adjust filters</span>
-              </div>
+              <div className="text-xs text-muted-foreground">Tune entries</div>
             </div>
-
+          </CardHeader>
+          <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[240px]">
                 <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-6 bg-gradient-to-r from-card/90 via-card/60 to-transparent md:block" />
@@ -697,20 +706,43 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 />
               </div>
             </div>
+
+            <ActiveFilters
+              filters={appliedFilters}
+              onRemove={key => {
+                setDraftRequest(prev => ({
+                  ...prev,
+                  [key]:
+                    definition.defaultRequest[
+                      key as keyof typeof definition.defaultRequest
+                    ],
+                }))
+                setAppliedRequest(prev => ({
+                  ...prev,
+                  [key]:
+                    definition.defaultRequest[
+                      key as keyof typeof definition.defaultRequest
+                    ],
+                }))
+              }}
+            />
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid gap-3">
+        <div className="grid gap-1">
+          <h1 className="font-display text-xl">{definition.title}</h1>
+          <p className="text-sm text-muted-foreground">
+            {definition.description}
+          </p>
+        </div>
 
         <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="text-base">Results</CardTitle>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                {query.dataUpdatedAt > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {new Date(query.dataUpdatedAt).toLocaleTimeString()}
-                  </span>
-                )}
                 <div className="flex items-center gap-2">
                   <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Rows / page
@@ -753,25 +785,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
             </div>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <ActiveFilters
-              filters={appliedFilters}
-              onRemove={key => {
-                setDraftRequest(prev => ({
-                  ...prev,
-                  [key]:
-                    definition.defaultRequest[
-                      key as keyof typeof definition.defaultRequest
-                    ],
-                }))
-                setAppliedRequest(prev => ({
-                  ...prev,
-                  [key]:
-                    definition.defaultRequest[
-                      key as keyof typeof definition.defaultRequest
-                    ],
-                }))
-              }}
-            />
             {query.isError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
                 {query.error instanceof Error

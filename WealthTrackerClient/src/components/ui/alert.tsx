@@ -30,4 +30,3 @@ export function AlertDescription({
 }: React.HTMLAttributes<HTMLParagraphElement>) {
   return <p className={cn('text-sm', className)} {...props} />
 }
-

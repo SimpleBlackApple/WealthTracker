@@ -1,4 +1,11 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 import type { PositionWithPL } from '../types/trading'
 
@@ -81,10 +88,14 @@ export function PositionsList({ positions }: { positions: PositionWithPL[] }) {
                     <TableCell className="text-right tabular-nums">
                       {money(p.currentPrice)}
                     </TableCell>
-                    <TableCell className={`text-right tabular-nums ${unrealizedColor}`}>
+                    <TableCell
+                      className={`text-right tabular-nums ${unrealizedColor}`}
+                    >
                       {unrealized == null ? '—' : money(unrealized)}
                     </TableCell>
-                    <TableCell className={`text-right tabular-nums ${realizedColor}`}>
+                    <TableCell
+                      className={`text-right tabular-nums ${realizedColor}`}
+                    >
                       {money(realized)}
                     </TableCell>
                   </TableRow>
@@ -97,4 +108,3 @@ export function PositionsList({ positions }: { positions: PositionWithPL[] }) {
     </div>
   )
 }
-

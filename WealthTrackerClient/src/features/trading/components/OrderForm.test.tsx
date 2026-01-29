@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { OrderForm } from './OrderForm'
+import { ToastProvider } from '@/components/ui/toast'
 
 const mutate = vi.fn()
 
@@ -22,12 +23,14 @@ describe('OrderForm', () => {
   it('requires limit price for limit orders', async () => {
     const user = userEvent.setup()
     render(
-      <OrderForm
-        portfolioId={1}
-        symbol="AAPL"
-        exchange="NASDAQ"
-        currentPrice={100}
-      />
+      <ToastProvider>
+        <OrderForm
+          portfolioId={1}
+          symbol="AAPL"
+          exchange="NASDAQ"
+          currentPrice={100}
+        />
+      </ToastProvider>
     )
 
     await user.type(screen.getByLabelText(/quantity/i), '10')
@@ -47,29 +50,34 @@ describe('OrderForm', () => {
   it('submits market orders with required fields', async () => {
     const user = userEvent.setup()
     render(
-      <OrderForm
-        portfolioId={42}
-        symbol="AAPL"
-        exchange={null}
-        currentPrice={123.45}
-      />
+      <ToastProvider>
+        <OrderForm
+          portfolioId={42}
+          symbol="AAPL"
+          exchange={null}
+          currentPrice={123.45}
+        />
+      </ToastProvider>
     )
 
     await user.type(screen.getByLabelText(/quantity/i), '5')
     await user.click(screen.getByRole('button', { name: 'Execute' }))
 
-    expect(mutate).toHaveBeenCalledWith({
-      portfolioId: 42,
-      request: {
-        symbol: 'AAPL',
-        exchange: undefined,
-        type: 'buy',
-        quantity: 5,
-        price: 123.45,
-        orderType: 'market',
-        limitPrice: undefined,
-        stopPrice: undefined,
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        portfolioId: 42,
+        request: {
+          symbol: 'AAPL',
+          exchange: undefined,
+          type: 'buy',
+          quantity: 5,
+          price: 123.45,
+          orderType: 'market',
+          limitPrice: undefined,
+          stopPrice: undefined,
+        },
       },
-    })
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    )
   })
 })

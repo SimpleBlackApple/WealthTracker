@@ -1,5 +1,13 @@
 import { Button } from '@/components/ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useToast } from '@/components/ui/toast'
 import { useCancelOrder, useOpenOrders } from '../hooks/useOrders'
 
 function money(value: number | null | undefined) {
@@ -11,9 +19,16 @@ function money(value: number | null | undefined) {
   })
 }
 
-export function OpenOrdersList({ portfolioId }: { portfolioId: number | null }) {
-  const query = useOpenOrders(portfolioId)
+export function OpenOrdersList({
+  portfolioId,
+  onGoToPortfolio,
+}: {
+  portfolioId: number | null
+  onGoToPortfolio?: () => void
+}) {
+  const query = useOpenOrders(portfolioId, { refetchInterval: 5000 })
   const cancel = useCancelOrder()
+  const { toast } = useToast()
 
   const orders = query.data ?? []
 
@@ -78,13 +93,24 @@ export function OpenOrdersList({ portfolioId }: { portfolioId: number | null }) 
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={
-                        portfolioId == null ||
-                        cancel.isPending
-                      }
+                      disabled={portfolioId == null || cancel.isPending}
                       onClick={() => {
                         if (!portfolioId) return
-                        cancel.mutate({ orderId: o.id, portfolioId })
+                        cancel.mutate(
+                          { orderId: o.id, portfolioId },
+                          {
+                            onSuccess: () => {
+                              toast({
+                                title: 'Order cancelled',
+                                description: `${o.type.toUpperCase()} ${o.quantity} ${o.symbol} • ${o.orderType}`,
+                                variant: 'warning',
+                                sound: 'warning',
+                                actionLabel: 'View portfolio',
+                                onClick: () => onGoToPortfolio?.(),
+                              })
+                            },
+                          }
+                        )
                       }}
                     >
                       Cancel
@@ -99,4 +125,3 @@ export function OpenOrdersList({ portfolioId }: { portfolioId: number | null }) 
     </div>
   )
 }
-

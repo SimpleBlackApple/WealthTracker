@@ -1,4 +1,7 @@
-import type { PortfolioSummary as Summary, SimulationPortfolio } from '../types/trading'
+import type {
+  PortfolioSummary as Summary,
+  SimulationPortfolio,
+} from '../types/trading'
 
 function money(value: number) {
   return value.toLocaleString(undefined, {
@@ -66,15 +69,21 @@ export function PortfolioSummary({
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <div className="text-muted-foreground">Total Value</div>
-          <div className="mt-1 text-sm font-semibold">{money(summary.totalValue)}</div>
+          <div className="mt-1 text-sm font-semibold">
+            {money(summary.totalValue)}
+          </div>
         </div>
         <div>
           <div className="text-muted-foreground">Cash</div>
-          <div className="mt-1 text-sm font-semibold">{money(summary.cash)}</div>
+          <div className="mt-1 text-sm font-semibold">
+            {money(summary.cash)}
+          </div>
         </div>
         <div>
           <div className="text-muted-foreground">Equity</div>
-          <div className="mt-1 text-sm font-semibold">{money(summary.equityValue)}</div>
+          <div className="mt-1 text-sm font-semibold">
+            {money(summary.equityValue)}
+          </div>
         </div>
         <div>
           <div className="text-muted-foreground">Total P&amp;L</div>
@@ -89,4 +98,3 @@ export function PortfolioSummary({
     </div>
   )
 }
-

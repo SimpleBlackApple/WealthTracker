@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Volume2, VolumeX } from 'lucide-react'
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePortfolios } from '../hooks/usePortfolios'
 import { usePortfolioSummary } from '../hooks/usePortfolio'
+import { useOrderNotifications } from '../hooks/useOrderNotifications'
 import { OrderForm } from './OrderForm'
 import { PortfolioSummary } from './PortfolioSummary'
 import { PositionsList } from './PositionsList'
@@ -33,25 +43,28 @@ export function TradingPanel({
   priceTimestamp,
 }: TradingPanelProps) {
   const [activeTab, setActiveTab] = useState('trade')
+  const { soundEnabled, setSoundEnabled } = useToast()
   const portfoliosQuery = usePortfolios()
   const portfolios = portfoliosQuery.data ?? []
 
   const [activePortfolioId, setActivePortfolioId] = useState<number | null>(
     null
   )
-
-  useEffect(() => {
-    if (activePortfolioId != null) return
-    if (portfolios.length === 0) return
-    setActivePortfolioId(portfolios[0].id)
-  }, [activePortfolioId, portfolios])
+  const resolvedPortfolioId =
+    activePortfolioId ?? (portfolios.length > 0 ? portfolios[0].id : null)
 
   const activePortfolio = useMemo(
-    () => portfolios.find(p => p.id === activePortfolioId) ?? null,
-    [activePortfolioId, portfolios]
+    () => portfolios.find(p => p.id === resolvedPortfolioId) ?? null,
+    [portfolios, resolvedPortfolioId]
   )
 
-  const summaryQuery = usePortfolioSummary(activePortfolioId)
+  const summaryQuery = usePortfolioSummary(resolvedPortfolioId)
+  const goToPortfolio = () => setActiveTab('portfolio')
+
+  useOrderNotifications({
+    portfolioId: resolvedPortfolioId,
+    onGoToPortfolio: goToPortfolio,
+  })
 
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -79,27 +92,47 @@ export function TradingPanel({
         <div className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           Portfolio
         </div>
-        <div className="w-full sm:w-64">
-          <Select
-            value={activePortfolioId != null ? String(activePortfolioId) : ''}
-            onValueChange={v => setActivePortfolioId(Number(v))}
-            disabled={portfoliosQuery.isLoading || portfolios.length === 0}
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9"
+            title={soundEnabled ? 'Sound on' : 'Sound off'}
+            onClick={() => setSoundEnabled(!soundEnabled)}
           >
-            <SelectTrigger className="h-9">
-              <SelectValue
-                placeholder={
-                  portfoliosQuery.isLoading ? 'Loading...' : 'Select portfolio'
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {portfolios.map(p => (
-                <SelectItem key={p.id} value={String(p.id)}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {soundEnabled ? (
+              <Volume2 className="h-4 w-4" />
+            ) : (
+              <VolumeX className="h-4 w-4" />
+            )}
+          </Button>
+          <div className="w-full sm:w-64">
+            <Select
+              value={
+                resolvedPortfolioId != null ? String(resolvedPortfolioId) : ''
+              }
+              onValueChange={v => setActivePortfolioId(Number(v))}
+              disabled={portfoliosQuery.isLoading || portfolios.length === 0}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue
+                  placeholder={
+                    portfoliosQuery.isLoading
+                      ? 'Loading...'
+                      : 'Select portfolio'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {portfolios.map(p => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -112,10 +145,11 @@ export function TradingPanel({
 
         <TabsContent value="trade" className="mt-3 space-y-3">
           <OrderForm
-            portfolioId={activePortfolioId}
+            portfolioId={resolvedPortfolioId}
             symbol={symbol}
             exchange={exchange}
             currentPrice={currentPrice}
+            onGoToPortfolio={goToPortfolio}
           />
         </TabsContent>
 
@@ -127,11 +161,14 @@ export function TradingPanel({
             error={summaryQuery.error as Error | null}
           />
           <PositionsList positions={summaryQuery.data?.positions ?? []} />
-          <OpenOrdersList portfolioId={activePortfolioId} />
+          <OpenOrdersList
+            portfolioId={resolvedPortfolioId}
+            onGoToPortfolio={goToPortfolio}
+          />
         </TabsContent>
 
         <TabsContent value="history" className="mt-3 space-y-3">
-          <TransactionHistory portfolioId={activePortfolioId} />
+          <TransactionHistory portfolioId={resolvedPortfolioId} />
         </TabsContent>
       </Tabs>
     </div>
