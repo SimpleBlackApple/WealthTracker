@@ -6,6 +6,7 @@ import { AuthCallback } from '@/features/auth/components/AuthCallback'
 import { useAuthGuard } from '@/features/auth/hooks/useAuthGuard'
 import { AppShell } from '@/components/layout/AppShell'
 import { ScannersPage } from '@/features/scanners/pages/ScannersPage'
+import { TradingProvider } from '@/features/trading/contexts/TradingContext'
 
 function LoginPage() {
   return (
@@ -111,7 +112,13 @@ function App() {
       <Route
         path="/"
         element={
-          isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
+          isAuthenticated ? (
+            <TradingProvider>
+              <AppShell />
+            </TradingProvider>
+          ) : (
+            <Navigate to="/login" replace />
+          )
         }
       >
         <Route

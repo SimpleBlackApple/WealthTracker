@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Volume2, VolumeX } from 'lucide-react'
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { useToast } from '@/components/ui/toast'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useTradingContext } from '../contexts/TradingContext'
 import { usePortfolios } from '../hooks/usePortfolios'
 import { usePortfolioSummary } from '../hooks/usePortfolio'
 import { useOrderNotifications } from '../hooks/useOrderNotifications'
@@ -42,14 +32,10 @@ export function TradingPanel({
   currentPrice,
   priceTimestamp,
 }: TradingPanelProps) {
-  const [activeTab, setActiveTab] = useState('trade')
-  const { soundEnabled, setSoundEnabled } = useToast()
+  const { activePortfolioId, activeView, setActiveView } = useTradingContext()
   const portfoliosQuery = usePortfolios()
   const portfolios = portfoliosQuery.data ?? []
 
-  const [activePortfolioId, setActivePortfolioId] = useState<number | null>(
-    null
-  )
   const resolvedPortfolioId =
     activePortfolioId ?? (portfolios.length > 0 ? portfolios[0].id : null)
 
@@ -59,7 +45,7 @@ export function TradingPanel({
   )
 
   const summaryQuery = usePortfolioSummary(resolvedPortfolioId)
-  const goToPortfolio = () => setActiveTab('portfolio')
+  const goToPortfolio = () => setActiveView('portfolio')
 
   useOrderNotifications({
     portfolioId: resolvedPortfolioId,
@@ -72,105 +58,129 @@ export function TradingPanel({
     return () => window.clearInterval(id)
   }, [])
 
-  return (
-    <div className="space-y-3 p-3">
-      <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">
-            Simulation Mode - Price from scanner
-          </span>
-          <span className="font-medium">
-            {currentPrice != null ? `$${currentPrice.toFixed(2)}` : 'N/A'}
-          </span>
-        </div>
-        <div className="mt-1 text-muted-foreground">
-          Last updated: {formatUpdatedAgo(priceTimestamp, now)}
-        </div>
-      </div>
+  // Calculate today's P&L from summary
+  const todayPnL = useMemo(() => {
+    const summary = summaryQuery.data
+    if (!summary) return { realized: 0, unrealized: 0 }
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-          Portfolio
-        </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <Button
+    // Calculate unrealized P&L from positions
+    const unrealized = summary.positions.reduce((sum, pos) => {
+      return sum + (pos.unrealizedPL ?? 0)
+    }, 0)
+
+    // Note: We don't have today's realized P&L separately, so using 0 for now
+    const realized = 0
+
+    return { realized, unrealized }
+  }, [summaryQuery.data])
+
+  // Show different views based on activeView
+  if (activeView === 'portfolio') {
+    return (
+      <div className="space-y-3 p-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Portfolio View</h3>
+          <button
             type="button"
-            variant="outline"
-            size="icon"
-            className="h-9 w-9"
-            title={soundEnabled ? 'Sound on' : 'Sound off'}
-            onClick={() => setSoundEnabled(!soundEnabled)}
+            onClick={() => setActiveView('trade')}
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
-            {soundEnabled ? (
-              <Volume2 className="h-4 w-4" />
-            ) : (
-              <VolumeX className="h-4 w-4" />
-            )}
-          </Button>
-          <div className="w-full sm:w-64">
-            <Select
-              value={
-                resolvedPortfolioId != null ? String(resolvedPortfolioId) : ''
-              }
-              onValueChange={v => setActivePortfolioId(Number(v))}
-              disabled={portfoliosQuery.isLoading || portfolios.length === 0}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue
-                  placeholder={
-                    portfoliosQuery.isLoading
-                      ? 'Loading...'
-                      : 'Select portfolio'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {portfolios.map(p => (
-                  <SelectItem key={p.id} value={String(p.id)}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            Back to Trade
+          </button>
+        </div>
+        <PortfolioSummary
+          portfolio={activePortfolio}
+          summary={summaryQuery.data ?? null}
+          isLoading={summaryQuery.isLoading}
+          error={summaryQuery.error as Error | null}
+        />
+        <PositionsList positions={summaryQuery.data?.positions ?? []} />
+        <OpenOrdersList
+          portfolioId={resolvedPortfolioId}
+          onGoToPortfolio={goToPortfolio}
+        />
+      </div>
+    )
+  }
+
+  if (activeView === 'history') {
+    return (
+      <div className="space-y-3 p-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Order History</h3>
+          <button
+            type="button"
+            onClick={() => setActiveView('trade')}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Back to Trade
+          </button>
+        </div>
+        <TransactionHistory portfolioId={resolvedPortfolioId} />
+      </div>
+    )
+  }
+
+  // Trade view (default)
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header with price info and P&L - ultra compact */}
+      <div className="shrink-0 space-y-1.5 border-b border-border/60 bg-card/60 px-3 py-2">
+        {/* Price and P&L in one compact box */}
+        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">Price</span>
+            <span className="font-medium">
+              {currentPrice != null ? `$${currentPrice.toFixed(2)}` : 'N/A'}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {formatUpdatedAgo(priceTimestamp, now)}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between border-t border-border/60 pt-1">
+            <span className="text-[10px] text-muted-foreground">
+              Today's P&L
+            </span>
+            <div className="flex items-center gap-3">
+              <span
+                className={
+                  todayPnL.realized > 0
+                    ? 'text-xs font-medium text-gain'
+                    : todayPnL.realized < 0
+                      ? 'text-xs font-medium text-loss'
+                      : 'text-xs font-medium'
+                }
+              >
+                R: {todayPnL.realized > 0 ? '+' : ''}$
+                {todayPnL.realized.toFixed(2)}
+              </span>
+              <span
+                className={
+                  todayPnL.unrealized > 0
+                    ? 'text-xs font-medium text-gain'
+                    : todayPnL.unrealized < 0
+                      ? 'text-xs font-medium text-loss'
+                      : 'text-xs font-medium'
+                }
+              >
+                U: {todayPnL.unrealized > 0 ? '+' : ''}$
+                {todayPnL.unrealized.toFixed(2)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="trade">Trade</TabsTrigger>
-          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="trade" className="mt-3 space-y-3">
-          <OrderForm
-            portfolioId={resolvedPortfolioId}
-            symbol={symbol}
-            exchange={exchange}
-            currentPrice={currentPrice}
-            onGoToPortfolio={goToPortfolio}
-          />
-        </TabsContent>
-
-        <TabsContent value="portfolio" className="mt-3 space-y-3">
-          <PortfolioSummary
-            portfolio={activePortfolio}
-            summary={summaryQuery.data ?? null}
-            isLoading={summaryQuery.isLoading}
-            error={summaryQuery.error as Error | null}
-          />
-          <PositionsList positions={summaryQuery.data?.positions ?? []} />
-          <OpenOrdersList
-            portfolioId={resolvedPortfolioId}
-            onGoToPortfolio={goToPortfolio}
-          />
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-3 space-y-3">
-          <TransactionHistory portfolioId={resolvedPortfolioId} />
-        </TabsContent>
-      </Tabs>
+      {/* Order Form (scrollable + fixed execute button) */}
+      <div className="flex-1 overflow-hidden">
+        <OrderForm
+          portfolioId={resolvedPortfolioId}
+          symbol={symbol}
+          exchange={exchange}
+          currentPrice={currentPrice}
+          onGoToPortfolio={goToPortfolio}
+        />
+      </div>
     </div>
   )
 }

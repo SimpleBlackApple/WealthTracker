@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -21,11 +21,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@/components/ui/resizable'
 import {
   Select,
   SelectContent,
@@ -121,19 +116,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     symbol: string
     exchange: string | null
   } | null>(null)
-  const [direction, setDirection] = useState<'horizontal' | 'vertical'>(
-    typeof window !== 'undefined' && window.innerWidth < 1024
-      ? 'vertical'
-      : 'horizontal'
-  )
-
-  useEffect(() => {
-    const handleResize = () => {
-      setDirection(window.innerWidth < 1024 ? 'vertical' : 'horizontal')
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   const query = useQuery({
     queryKey: ['scanner', definition.id, appliedRequest],
@@ -325,8 +307,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
-      <div className="grid gap-4 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:overflow-auto lg:pr-1">
+    <div className="grid h-[calc(100vh-5rem)] gap-2 lg:grid-cols-[280px_1fr_minmax(400px,600px)]">
+      {/* LEFT SIDEBAR - Scanner List */}
+      <div className="grid gap-2 overflow-auto pr-1">
         <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold">Scanners</CardTitle>
@@ -349,64 +332,6 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 </div>
               </NavLink>
             ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">
-              Scanner actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <Button
-              onClick={() => {
-                setPageIndex(0)
-                setAppliedRequest(draftRequest)
-              }}
-              disabled={query.isFetching}
-              className="w-full"
-            >
-              Run
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                onClick={() => query.refetch()}
-                disabled={query.isFetching}
-                className="w-full"
-              >
-                <RefreshCw
-                  className={cn(
-                    'mr-2 h-4 w-4',
-                    query.isFetching && 'animate-spin'
-                  )}
-                />
-                Refresh
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setDraftRequest(definition.defaultRequest)
-                  setAppliedRequest(definition.defaultRequest)
-                  setSort(definition.defaultSort)
-                  setPageIndex(0)
-                  setSymbolFilter('')
-                }}
-                className="w-full"
-              >
-                Reset
-              </Button>
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
-              {query.dataUpdatedAt > 0 && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {new Date(query.dataUpdatedAt).toLocaleTimeString()}
-                </span>
-              )}
-            </div>
           </CardContent>
         </Card>
 
@@ -730,12 +655,61 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
         </Card>
       </div>
 
-      <div className="grid gap-3">
+      {/* MIDDLE - Scanner Results and Filters */}
+      <div className="grid gap-2 overflow-auto">
         <div className="grid gap-1">
-          <h1 className="font-display text-xl">{definition.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {definition.description}
-          </p>
+          <div className="flex items-center justify-between">
+            <h1 className="font-display text-xl">{definition.title}</h1>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => {
+                  setPageIndex(0)
+                  setAppliedRequest(draftRequest)
+                }}
+                disabled={query.isFetching}
+                size="sm"
+              >
+                Run
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => query.refetch()}
+                disabled={query.isFetching}
+              >
+                <RefreshCw
+                  className={cn('h-4 w-4', query.isFetching && 'animate-spin')}
+                />
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setDraftRequest(definition.defaultRequest)
+                  setAppliedRequest(definition.defaultRequest)
+                  setSort(definition.defaultSort)
+                  setPageIndex(0)
+                  setSymbolFilter('')
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {definition.description}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
+              {query.dataUpdatedAt > 0 && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {new Date(query.dataUpdatedAt).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
@@ -797,226 +771,192 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 rows={pageSize}
               />
             ) : (
-              <div className="grid gap-3">
-                <div className="overflow-hidden rounded-md border border-border/60 bg-card/60">
-                  <ResizablePanelGroup
-                    direction={direction}
-                    className="min-h-[420px]"
-                  >
-                    <ResizablePanel
-                      defaultSize={selectedSymbol ? 60 : 100}
-                      minSize={selectedSymbol ? 30 : 100}
-                      maxSize={selectedSymbol ? undefined : 100}
-                    >
-                      <div className="flex h-full flex-col">
-                        <div className="shrink-0 overflow-hidden">
-                          <Table>
-                            <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
-                              <TableRow>
-                                <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
-                                  #
-                                </TableHead>
-                                {definition.columns.map(col => {
-                                  const active = sort.key === col.key
-                                  const Icon = !active
-                                    ? ArrowUpDown
-                                    : sort.direction === 'asc'
-                                      ? ArrowUp
-                                      : ArrowDown
-                                  return (
-                                    <TableHead
-                                      key={col.key}
-                                      className={cn(
-                                        'whitespace-nowrap',
-                                        col.align === 'right' && 'text-right',
-                                        col.key === 'symbol' &&
-                                          'border-r border-border'
-                                      )}
-                                    >
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleSort(col.key)}
-                                        aria-label={`Sort by ${col.header}`}
-                                        className={cn(
-                                          'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
-                                          active && 'text-foreground'
-                                        )}
-                                      >
-                                        {col.header}
-                                        <Icon className="h-3.5 w-3.5 opacity-70" />
-                                      </button>
-                                    </TableHead>
-                                  )
-                                })}
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {pageRows.length === 0 ? (
-                                <TableRow>
-                                  <TableCell
-                                    colSpan={definition.columns.length + 1}
-                                    className="py-10 text-center text-sm text-muted-foreground"
-                                  >
-                                    {query.isFetching
-                                      ? 'Loading...'
-                                      : 'No results. Try widening filters or using period 5d outside market hours.'}
-                                  </TableCell>
-                                </TableRow>
-                              ) : (
-                                pageRows.map((row, idx) => {
-                                  const symbol = String(row.symbol)
-                                  const exchange =
-                                    (row as { exchange?: string }).exchange ||
-                                    null
-                                  const isSelected =
-                                    selectedSymbol?.symbol === symbol
-                                  return (
-                                    <TableRow
-                                      key={`${symbol}-${idx}`}
-                                      className={cn(
-                                        'cursor-pointer transition-colors hover:bg-muted/50',
-                                        isSelected &&
-                                          'bg-primary/5 hover:bg-primary/10'
-                                      )}
-                                      onClick={() =>
-                                        setSelectedSymbol({ symbol, exchange })
-                                      }
-                                    >
-                                      <TableCell className="w-12 text-center text-xs text-muted-foreground">
-                                        {currentPageIndex * pageSize + idx + 1}
-                                      </TableCell>
-                                      {definition.columns.map(col => {
-                                        const value = col.getValue(row as never)
-                                        return (
-                                          <TableCell
-                                            key={col.key}
-                                            className={cn(
-                                              'whitespace-nowrap',
-                                              col.align === 'right' &&
-                                                'text-right font-variant-numeric tabular-nums',
-                                              col.key === 'symbol' &&
-                                                'border-r border-border'
-                                            )}
-                                          >
-                                            {renderCell(col.key, value)}
-                                          </TableCell>
-                                        )
-                                      })}
-                                    </TableRow>
-                                  )
-                                })
+              <div className="overflow-hidden rounded-md border border-border/60 bg-card/60">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
+                    <TableRow>
+                      <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
+                        #
+                      </TableHead>
+                      {definition.columns.map(col => {
+                        const active = sort.key === col.key
+                        const Icon = !active
+                          ? ArrowUpDown
+                          : sort.direction === 'asc'
+                            ? ArrowUp
+                            : ArrowDown
+                        return (
+                          <TableHead
+                            key={col.key}
+                            className={cn(
+                              'whitespace-nowrap',
+                              col.align === 'right' && 'text-right',
+                              col.key === 'symbol' && 'border-r border-border'
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleSort(col.key)}
+                              aria-label={`Sort by ${col.header}`}
+                              className={cn(
+                                'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
+                                active && 'text-foreground'
                               )}
-                            </TableBody>
-                          </Table>
-                        </div>
-
-                        <div className="shrink-0 border-t border-border/60 bg-card/60 px-3 py-2 pr-6">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="w-full text-xs text-muted-foreground sm:w-auto">
-                              {totalRows === 0
-                                ? '0 rows'
-                                : `${currentPageIndex * pageSize + 1}-${Math.min(
-                                    (currentPageIndex + 1) * pageSize,
-                                    totalRows
-                                  )} of ${totalRows.toLocaleString()}`}
-                            </div>
-                            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setPageIndex(0)}
-                                disabled={currentPageIndex === 0}
-                              >
-                                First
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  setPageIndex(p => Math.max(0, p - 1))
-                                }
-                                disabled={currentPageIndex === 0}
-                              >
-                                Prev
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  setPageIndex(p =>
-                                    Math.min(totalPages - 1, p + 1)
-                                  )
-                                }
-                                disabled={currentPageIndex >= totalPages - 1}
-                              >
-                                Next
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setPageIndex(totalPages - 1)}
-                                disabled={currentPageIndex >= totalPages - 1}
-                              >
-                                Last
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex-1" />
-                      </div>
-                    </ResizablePanel>
-
-                    {selectedSymbol && <ResizableHandle withHandle />}
-
-                    {selectedSymbol && (
-                      <ResizablePanel defaultSize={40} minSize={20}>
-                        <div className="flex h-full min-h-[420px] flex-col bg-muted/20">
-                          <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-3 py-2">
-                            <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1 shadow-sm backdrop-blur">
-                              <StockSymbolBadge
-                                symbol={selectedSymbol.symbol}
-                              />
-                              <span className="text-xs font-bold tracking-wider">
-                                {selectedSymbol.symbol}
-                              </span>
-                            </div>
-                            <Button
-                              variant="secondary"
-                              size="icon"
-                              className="h-7 w-7 rounded-full shadow-sm"
-                              onClick={() => setSelectedSymbol(null)}
-                              title="Close chart"
                             >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                          <div className="flex-[3] min-h-0">
-                            <TradingViewChart
-                              symbol={selectedSymbol.symbol}
-                              exchange={selectedSymbol.exchange}
-                            />
-                          </div>
-                          <div className="flex-[2] overflow-y-auto border-t border-border/60 bg-card/60">
-                            <TradingPanel
-                              symbol={selectedSymbol.symbol}
-                              exchange={selectedSymbol.exchange}
-                              currentPrice={getCurrentPriceFromScanner(
-                                selectedSymbol.symbol
-                              )}
-                              priceTimestamp={query.dataUpdatedAt}
-                            />
-                          </div>
-                        </div>
-                      </ResizablePanel>
+                              {col.header}
+                              <Icon className="h-3.5 w-3.5 opacity-70" />
+                            </button>
+                          </TableHead>
+                        )
+                      })}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pageRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={definition.columns.length + 1}
+                          className="py-10 text-center text-sm text-muted-foreground"
+                        >
+                          {query.isFetching
+                            ? 'Loading...'
+                            : 'No results. Try widening filters or using period 5d outside market hours.'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pageRows.map((row, idx) => {
+                        const symbol = String(row.symbol)
+                        const exchange =
+                          (row as { exchange?: string }).exchange || null
+                        const isSelected = selectedSymbol?.symbol === symbol
+                        return (
+                          <TableRow
+                            key={`${symbol}-${idx}`}
+                            className={cn(
+                              'cursor-pointer transition-colors hover:bg-muted/50',
+                              isSelected && 'bg-primary/5 hover:bg-primary/10'
+                            )}
+                            onClick={() =>
+                              setSelectedSymbol({ symbol, exchange })
+                            }
+                          >
+                            <TableCell className="w-12 text-center text-xs text-muted-foreground">
+                              {currentPageIndex * pageSize + idx + 1}
+                            </TableCell>
+                            {definition.columns.map(col => {
+                              const value = col.getValue(row as never)
+                              return (
+                                <TableCell
+                                  key={col.key}
+                                  className={cn(
+                                    'whitespace-nowrap',
+                                    col.align === 'right' &&
+                                      'text-right font-variant-numeric tabular-nums',
+                                    col.key === 'symbol' &&
+                                      'border-r border-border'
+                                  )}
+                                >
+                                  {renderCell(col.key, value)}
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        )
+                      })
                     )}
-                  </ResizablePanelGroup>
+                  </TableBody>
+                </Table>
+
+                <div className="border-t border-border/60 bg-card/60 px-3 py-2 pr-6">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="w-full text-xs text-muted-foreground sm:w-auto">
+                      {totalRows === 0
+                        ? '0 rows'
+                        : `${currentPageIndex * pageSize + 1}-${Math.min(
+                            (currentPageIndex + 1) * pageSize,
+                            totalRows
+                          )} of ${totalRows.toLocaleString()}`}
+                    </div>
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPageIndex(0)}
+                        disabled={currentPageIndex === 0}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPageIndex(p => Math.max(0, p - 1))}
+                        disabled={currentPageIndex === 0}
+                      >
+                        Prev
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setPageIndex(p => Math.min(totalPages - 1, p + 1))
+                        }
+                        disabled={currentPageIndex >= totalPages - 1}
+                      >
+                        Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPageIndex(totalPages - 1)}
+                        disabled={currentPageIndex >= totalPages - 1}
+                      >
+                        Last
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* RIGHT - Chart + Trading Panel (always visible when symbol selected) */}
+      {selectedSymbol && (
+        <div className="flex h-full flex-col overflow-hidden rounded-md border border-border/60 bg-card/60">
+          <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-card/60 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1 shadow-sm backdrop-blur">
+              <StockSymbolBadge symbol={selectedSymbol.symbol} />
+              <span className="text-xs font-bold tracking-wider">
+                {selectedSymbol.symbol}
+              </span>
+            </div>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-7 w-7 rounded-full shadow-sm"
+              onClick={() => setSelectedSymbol(null)}
+              title="Close chart"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="flex-[3] min-h-0">
+            <TradingViewChart
+              symbol={selectedSymbol.symbol}
+              exchange={selectedSymbol.exchange}
+            />
+          </div>
+          <div className="flex-[2] overflow-hidden border-t border-border/60 bg-card/60">
+            <TradingPanel
+              symbol={selectedSymbol.symbol}
+              exchange={selectedSymbol.exchange}
+              currentPrice={getCurrentPriceFromScanner(selectedSymbol.symbol)}
+              priceTimestamp={query.dataUpdatedAt}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
