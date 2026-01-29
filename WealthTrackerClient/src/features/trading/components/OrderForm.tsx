@@ -193,15 +193,15 @@ export function OrderForm({
       <div className="flex-1 space-y-2 overflow-y-auto px-3 pt-2">
         {/* Order Action & Type - Side by side */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="action" className="text-[10px] text-muted-foreground">
+          <div className="space-y-0.5">
+            <Label htmlFor="action" className="text-[9px] text-muted-foreground uppercase font-semibold">
               Action
             </Label>
             <Select
               value={action}
               onValueChange={v => setAction(v as TransactionType)}
             >
-              <SelectTrigger id="action" className="h-8 text-xs">
+              <SelectTrigger id="action" className="h-7 text-xs px-2">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -213,15 +213,15 @@ export function OrderForm({
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="orderType" className="text-[10px] text-muted-foreground">
+          <div className="space-y-0.5">
+            <Label htmlFor="orderType" className="text-[9px] text-muted-foreground uppercase font-semibold">
               Type
             </Label>
             <Select
               value={orderType}
               onValueChange={v => setOrderType(v as OrderType)}
             >
-              <SelectTrigger id="orderType" className="h-8 text-xs">
+              <SelectTrigger id="orderType" className="h-7 text-xs px-2">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -241,177 +241,114 @@ export function OrderForm({
           </Alert>
         )}
 
-        {/* Quantity with +/- buttons */}
-        <div className="space-y-1">
-          <Label htmlFor="quantity" className="text-[10px] text-muted-foreground">
-            Quantity
-          </Label>
-          <div className="flex gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={() => setQuantity(q => Math.max(1, q - 10))}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </Button>
-            <Input
-              id="quantity"
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-              className="h-8 text-center text-xs"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={() => setQuantity(q => q + 10)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
+        {/* Quantity & Price - Side by side */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-0.5">
+            <Label htmlFor="quantity" className="text-[9px] text-muted-foreground uppercase font-semibold">
+              Quantity
+            </Label>
+            <div className="flex gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => setQuantity(q => Math.max(1, q - 10))}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <Input
+                id="quantity"
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                className="h-7 text-center text-[11px] px-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => setQuantity(q => q + 10)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
+
+          {orderType !== 'market' && (
+            <div className="space-y-0.5">
+              <Label htmlFor="priceInput" className="text-[9px] text-muted-foreground uppercase font-semibold">
+                {orderType === 'limit' ? 'Limit Price' : 'Stop Price'}
+              </Label>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={() => {
+                    if (orderType === 'limit') setLimitPrice(p => Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01))
+                    else setStopPrice(p => Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01))
+                  }}
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <Input
+                  id="priceInput"
+                  type="number"
+                  step="0.01"
+                  value={(orderType === 'limit' ? limitPrice : stopPrice) ?? ''}
+                  onChange={e => {
+                    const val = e.target.value === '' ? null : Number(e.target.value)
+                    if (orderType === 'limit') setLimitPrice(val)
+                    else setStopPrice(val)
+                  }}
+                  className="h-7 text-center text-[11px] px-1"
+                  placeholder={currentPrice?.toFixed(2)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={() => {
+                    if (orderType === 'limit') setLimitPrice(p => (p ?? currentPrice ?? 0) + 0.01)
+                    else setStopPrice(p => (p ?? currentPrice ?? 0) + 0.01)
+                  }}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Price with +/- buttons (for limit orders) */}
-        {orderType === 'limit' && (
-          <div className="space-y-1">
-            <Label htmlFor="limitPrice" className="text-[10px] text-muted-foreground">
-              Limit Price
-            </Label>
-            <div className="flex gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() =>
-                  setLimitPrice(p => Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01))
-                }
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </Button>
-              <Input
-                id="limitPrice"
-                type="number"
-                step="0.01"
-                value={limitPrice ?? ''}
-                onChange={e =>
-                  setLimitPrice(
-                    e.target.value === '' ? null : Number(e.target.value)
-                  )
-                }
-                className="h-8 text-center text-xs"
-                placeholder={currentPrice?.toFixed(2)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() =>
-                  setLimitPrice(p => (p ?? currentPrice ?? 0) + 0.01)
-                }
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Stop Price (for stop loss orders) */}
-        {orderType === 'stopLoss' && (
-          <div className="space-y-1">
-            <Label htmlFor="stopPrice" className="text-[10px] text-muted-foreground">
-              Stop Price
-            </Label>
-            <div className="flex gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() =>
-                  setStopPrice(p => Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01))
-                }
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </Button>
-              <Input
-                id="stopPrice"
-                type="number"
-                step="0.01"
-                value={stopPrice ?? ''}
-                onChange={e =>
-                  setStopPrice(
-                    e.target.value === '' ? null : Number(e.target.value)
-                  )
-                }
-                className="h-8 text-center text-xs"
-                placeholder={currentPrice?.toFixed(2)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                onClick={() =>
-                  setStopPrice(p => (p ?? currentPrice ?? 0) + 0.01)
-                }
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Fee Estimate - More compact */}
-        {feeEstimate && (
-          <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px]">
-            <div className="mb-1 font-semibold text-foreground">Fees</div>
-            <div className="grid gap-0.5 text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Commission</span>
-                <span>{toMoney(feeEstimate.commission)}</span>
+        {/* Fee & Summary - Combined into one row/area */}
+        <div className="grid grid-cols-2 gap-2">
+          {feeEstimate && (
+            <div className="rounded-md border border-border/40 bg-muted/20 px-2 py-1.5 text-[11px] flex flex-col justify-center">
+              <div className="flex justify-between items-center text-muted-foreground">
+                <span className="text-[9px] uppercase font-semibold">Fees</span>
+                <span className="font-bold text-foreground text-xs">{toMoney(feeEstimate.totalFees)}</span>
               </div>
-              {(action === 'sell' || action === 'short') && (
-                <>
-                  <div className="flex justify-between">
-                    <span>TAF + SEC</span>
-                    <span>
-                      {toMoney(feeEstimate.tafFee + feeEstimate.secFee)}
-                    </span>
-                  </div>
-                </>
-              )}
-              {action === 'short' && (
-                <div className="flex justify-between">
-                  <span>Locate</span>
-                  <span>{toMoney(feeEstimate.locateFee)}</span>
-                </div>
-              )}
-              <div className="mt-0.5 flex justify-between border-t border-border/60 pt-1 font-medium text-foreground">
-                <span>Total Fees</span>
-                <span>{toMoney(feeEstimate.totalFees)}</span>
+              <div className="flex justify-between items-center text-[8px] text-muted-foreground/60 leading-tight">
+                <span>Comm: {toMoney(feeEstimate.commission)}</span>
+                {action === 'short' && <span>Loc: {toMoney(feeEstimate.locateFee)}</span>}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Order Summary - More compact */}
-        <div className="rounded-md border border-border/60 bg-card/60 px-2 py-1.5 text-[10px]">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Symbol</span>
-            <span className="font-medium">{symbol}</span>
-          </div>
-          <div className="mt-0.5 flex items-center justify-between">
-            <span className="text-muted-foreground">Est. Total</span>
-            <span className="font-medium">
-              {totalEstimate != null ? toMoney(totalEstimate) : '—'}
-            </span>
+          )}
+          <div className="rounded-md border border-border/40 bg-card/40 px-2 py-1.5 text-[11px] flex flex-col justify-center">
+            <div className="flex justify-between items-center text-muted-foreground">
+              <span className="text-[9px] uppercase font-semibold">Total</span>
+              <span className="font-bold text-foreground text-xs">
+                {totalEstimate != null ? toMoney(totalEstimate) : '—'}
+              </span>
+            </div>
+            <div className="text-[8px] text-right text-muted-foreground/60">
+              {symbol}
+            </div>
           </div>
         </div>
 

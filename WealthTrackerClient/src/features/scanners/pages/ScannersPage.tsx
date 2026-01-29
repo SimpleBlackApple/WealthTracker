@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Clock,
   RefreshCw,
-  X,
+  Search,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { ActiveFilters } from '@/features/scanners/components/ActiveFilters'
 import { FilterChip } from '@/features/scanners/components/FilterChip'
@@ -116,6 +115,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     symbol: string
     exchange: string | null
   } | null>(null)
+  const [isPanelVisible, setIsPanelVisible] = useState(true)
 
   const query = useQuery({
     queryKey: ['scanner', definition.id, appliedRequest],
@@ -307,14 +307,23 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   }
 
   return (
-    <div className="grid h-[calc(100vh-5rem)] gap-2 lg:grid-cols-[280px_1fr_minmax(400px,600px)]">
+    <div
+      className={cn(
+        'grid h-[calc(100vh-5rem)] gap-2 transition-all duration-300 ease-in-out',
+        selectedSymbol
+          ? isPanelVisible
+            ? 'lg:grid-cols-[240px_1fr_minmax(400px,500px)]'
+            : 'lg:grid-cols-[240px_1fr_12px]'
+          : 'lg:grid-cols-[240px_1fr]'
+      )}
+    >
       {/* LEFT SIDEBAR - Scanner List */}
       <div className="grid gap-2 overflow-auto pr-1">
         <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Scanners</CardTitle>
+          <CardHeader className="pb-3 border-b border-border/40">
+            <CardTitle className="text-sm font-semibold tracking-tight">Scanners</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-1">
+          <CardContent className="grid gap-1 p-2">
             {SCANNERS.map(s => (
               <NavLink
                 key={s.id}
@@ -322,64 +331,115 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 className={({ isActive }) =>
                   cn(
                     'rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground',
-                    isActive && 'bg-muted/60 font-semibold text-foreground'
+                    isActive && 'bg-muted/60 font-semibold text-foreground border border-border/40'
                   )
                 }
               >
                 <div className="leading-4">{s.title}</div>
-                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground/70">
                   {s.description}
                 </div>
               </NavLink>
             ))}
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.32em] text-muted-foreground">
+      {/* MIDDLE - Scanner Results and Filters */}
+      <div className="flex flex-col gap-2 overflow-hidden">
+        <Card className="shrink-0 border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="font-display text-xl">{definition.title}</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {definition.description}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="mr-2 flex items-center gap-2 text-[10px] text-muted-foreground/60 border-r border-border/60 pr-4">
+                  <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
+                  {query.dataUpdatedAt > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {new Date(query.dataUpdatedAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  onClick={() => {
+                    setPageIndex(0)
+                    setAppliedRequest(draftRequest)
+                  }}
+                  disabled={query.isFetching}
+                  size="sm"
+                  className="h-8 px-4"
+                >
+                  Run
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => query.refetch()}
+                  disabled={query.isFetching}
+                >
+                  <RefreshCw
+                    className={cn('h-3.5 w-3.5', query.isFetching && 'animate-spin')}
+                  />
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => {
+                    setDraftRequest(definition.defaultRequest)
+                    setAppliedRequest(definition.defaultRequest)
+                    setSort(definition.defaultSort)
+                    setPageIndex(0)
+                    setSymbolFilter('')
+                  }}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 pt-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
                   Filters
                 </span>
                 <span
                   className={cn(
-                    'rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.28em]',
+                    'rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
                     appliedFilterCount > 0
                       ? 'border-primary/40 bg-primary/10 text-primary'
                       : 'border-border/60 text-muted-foreground'
                   )}
                 >
-                  {appliedFilterCount} applied
+                  {appliedFilterCount}
                 </span>
               </div>
-              <div className="text-xs text-muted-foreground">Tune entries</div>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[240px]">
-                <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-6 bg-gradient-to-r from-card/90 via-card/60 to-transparent md:block" />
-                <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-6 bg-gradient-to-l from-card/90 via-card/60 to-transparent md:block" />
+
+              <div className="relative flex-1 min-w-[200px] max-w-2xl">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute -left-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 rounded-full border bg-card/90 shadow-sm md:flex"
+                  className="absolute -left-2 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border bg-card/90 shadow-sm transition-opacity opacity-0 hover:opacity-100 md:flex hidden"
                   onClick={() => {
-                    const el = document.getElementById(
-                      'filter-scroll-container'
-                    )
-                    if (el) el.scrollBy({ left: -200, behavior: 'smooth' })
+                    const el = document.getElementById('filter-scroll-container')
+                    if (el) el.scrollBy({ left: -150, behavior: 'smooth' })
                   }}
-                  aria-label="Scroll filters left"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
 
                 <div
                   id="filter-scroll-container"
-                  className="relative flex flex-wrap items-center gap-2 overflow-visible md:flex-nowrap md:overflow-x-auto md:pb-2 md:-mb-2 md:px-8"
-                  style={{ scrollbarWidth: 'thin', scrollbarGutter: 'stable' }}
+                  className="flex items-center gap-2 overflow-x-auto no-scrollbar md:pb-0"
+                  style={{ scrollbarWidth: 'none' }}
                 >
                   <Popover>
                     <PopoverTrigger asChild>
@@ -392,44 +452,16 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     <PopoverContent className="w-56 p-3">
                       <div className="grid gap-3">
                         <div className="grid gap-1">
-                          <Label htmlFor="minPrice" className="text-xs">
-                            Min price
-                          </Label>
-                          <Input
-                            id="minPrice"
-                            type="number"
-                            step="0.01"
-                            value={String(draftRequest.minPrice)}
-                            onChange={e =>
-                              setDraftRequest(prev => ({
-                                ...prev,
-                                minPrice: coerceNumber(
-                                  e.target.value,
-                                  prev.minPrice
-                                ),
-                              }))
-                            }
+                          <Label htmlFor="minPrice" className="text-xs">Min price</Label>
+                          <Input id="minPrice" type="number" step="0.01" value={String(draftRequest.minPrice)}
+                            onChange={e => setDraftRequest(prev => ({ ...prev, minPrice: coerceNumber(e.target.value, prev.minPrice) }))}
                             className="h-8"
                           />
                         </div>
                         <div className="grid gap-1">
-                          <Label htmlFor="maxPrice" className="text-xs">
-                            Max price
-                          </Label>
-                          <Input
-                            id="maxPrice"
-                            type="number"
-                            step="0.01"
-                            value={String(draftRequest.maxPrice)}
-                            onChange={e =>
-                              setDraftRequest(prev => ({
-                                ...prev,
-                                maxPrice: coerceNumber(
-                                  e.target.value,
-                                  prev.maxPrice
-                                ),
-                              }))
-                            }
+                          <Label htmlFor="maxPrice" className="text-xs">Max price</Label>
+                          <Input id="maxPrice" type="number" step="0.01" value={String(draftRequest.maxPrice)}
+                            onChange={e => setDraftRequest(prev => ({ ...prev, maxPrice: coerceNumber(e.target.value, prev.maxPrice) }))}
                             className="h-8"
                           />
                         </div>
@@ -442,31 +474,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       <FilterChip
                         label="Avg Vol"
                         value={formatCompact(draftRequest.minAvgVol)}
-                        defaultValue={formatCompact(
-                          definition.defaultRequest.minAvgVol
-                        )}
+                        defaultValue={formatCompact(definition.defaultRequest.minAvgVol)}
                       />
                     </PopoverTrigger>
                     <PopoverContent className="w-48 p-3">
                       <div className="grid gap-2">
-                        <Label htmlFor="minAvgVol" className="text-xs">
-                          Min avg vol
-                        </Label>
-                        <Input
-                          id="minAvgVol"
-                          type="number"
-                          min={0}
-                          step={10000}
-                          value={String(draftRequest.minAvgVol)}
-                          onChange={e =>
-                            setDraftRequest(prev => ({
-                              ...prev,
-                              minAvgVol: coerceInt(
-                                e.target.value,
-                                prev.minAvgVol
-                              ),
-                            }))
-                          }
+                        <Label htmlFor="minAvgVol" className="text-xs">Min avg vol</Label>
+                        <Input id="minAvgVol" type="number" min={0} step={10000} value={String(draftRequest.minAvgVol)}
+                          onChange={e => setDraftRequest(prev => ({ ...prev, minAvgVol: coerceInt(e.target.value, prev.minAvgVol) }))}
                           className="h-8"
                         />
                       </div>
@@ -483,23 +498,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     </PopoverTrigger>
                     <PopoverContent className="w-40 p-3">
                       <div className="grid gap-2">
-                        <Label htmlFor="minChangePct" className="text-xs">
-                          Min change %
-                        </Label>
-                        <Input
-                          id="minChangePct"
-                          type="number"
-                          step="0.1"
-                          value={String(draftRequest.minChangePct)}
-                          onChange={e =>
-                            setDraftRequest(prev => ({
-                              ...prev,
-                              minChangePct: coerceNumber(
-                                e.target.value,
-                                prev.minChangePct
-                              ),
-                            }))
-                          }
+                        <Label htmlFor="minChangePct" className="text-xs">Min change %</Label>
+                        <Input id="minChangePct" type="number" step="0.1" value={String(draftRequest.minChangePct)}
+                          onChange={e => setDraftRequest(prev => ({ ...prev, minChangePct: coerceNumber(e.target.value, prev.minChangePct) }))}
                           className="h-8"
                         />
                       </div>
@@ -517,25 +518,12 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     <PopoverContent className="w-40 p-3">
                       <div className="grid gap-2">
                         <Label className="text-xs">Interval</Label>
-                        <Select
-                          value={draftRequest.interval}
-                          onValueChange={value =>
-                            setDraftRequest(prev => ({
-                              ...prev,
-                              interval: value,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-8">
-                            <SelectValue />
-                          </SelectTrigger>
+                        <Select value={draftRequest.interval} onValueChange={value => setDraftRequest(prev => ({ ...prev, interval: value }))}>
+                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="1m">1m</SelectItem>
-                            <SelectItem value="2m">2m</SelectItem>
-                            <SelectItem value="5m">5m</SelectItem>
-                            <SelectItem value="15m">15m</SelectItem>
-                            <SelectItem value="30m">30m</SelectItem>
-                            <SelectItem value="60m">60m</SelectItem>
+                            {['1m', '2m', '5m', '15m', '30m', '60m'].map(v => (
+                              <SelectItem key={v} value={v}>{v}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -547,42 +535,19 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       <PopoverTrigger asChild>
                         <FilterChip
                           label="Volume"
-                          value={formatCompact(
-                            (draftRequest as ScannerRequestById['day-gainers'])
-                              .minTodayVolume
-                          )}
-                          defaultValue={formatCompact(
-                            (
-                              definition.defaultRequest as ScannerRequestById['day-gainers']
-                            ).minTodayVolume
-                          )}
+                          value={formatCompact((draftRequest as ScannerRequestById['day-gainers']).minTodayVolume)}
+                          defaultValue={formatCompact((definition.defaultRequest as ScannerRequestById['day-gainers']).minTodayVolume)}
                         />
                       </PopoverTrigger>
                       <PopoverContent className="w-48 p-3">
                         <div className="grid gap-2">
-                          <Label htmlFor="minTodayVolume" className="text-xs">
-                            Min today volume
-                          </Label>
-                          <Input
-                            id="minTodayVolume"
-                            type="number"
-                            min={0}
-                            step={10000}
-                            value={String(
-                              (
-                                draftRequest as ScannerRequestById['day-gainers']
-                              ).minTodayVolume
-                            )}
-                            onChange={e =>
-                              setDraftRequest(prev => ({
-                                ...prev,
-                                minTodayVolume: coerceInt(
-                                  e.target.value,
-                                  (prev as ScannerRequestById['day-gainers'])
-                                    .minTodayVolume
-                                ),
-                              }))
-                            }
+                          <Label htmlFor="minTodayVolume" className="text-xs">Min today volume</Label>
+                          <Input id="minTodayVolume" type="number" min={0} step={10000}
+                            value={String((draftRequest as ScannerRequestById['day-gainers']).minTodayVolume)}
+                            onChange={e => setDraftRequest(prev => ({
+                              ...prev,
+                              minTodayVolume: coerceInt(e.target.value, (prev as ScannerRequestById['day-gainers']).minTodayVolume),
+                            }))}
                             className="h-8"
                           />
                         </div>
@@ -594,171 +559,86 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute -right-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 rounded-full border bg-card/90 shadow-sm md:flex"
+                  className="absolute -right-2 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border bg-card/90 shadow-sm transition-opacity opacity-0 hover:opacity-100 md:flex hidden"
                   onClick={() => {
-                    const el = document.getElementById(
-                      'filter-scroll-container'
-                    )
-                    if (el) el.scrollBy({ left: 200, behavior: 'smooth' })
+                    const el = document.getElementById('filter-scroll-container')
+                    if (el) el.scrollBy({ left: 150, behavior: 'smooth' })
                   }}
-                  aria-label="Scroll filters right"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
 
-              <Separator
-                orientation="vertical"
-                className="hidden h-8 md:block"
-              />
-
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <Label
-                  htmlFor="symbolFilter"
-                  className="text-[10px] font-semibold uppercase tracking-[0.28em] text-muted-foreground"
-                >
+              <div className="flex items-center gap-2">
+                <Label htmlFor="symbolFilter" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
                   Symbol
                 </Label>
-                <Input
-                  id="symbolFilter"
-                  placeholder="Filter list..."
-                  value={symbolFilter}
-                  onChange={e => {
-                    setPageIndex(0)
-                    setSymbolFilter(e.target.value)
-                  }}
-                  className="h-9 w-full bg-muted/50 focus:bg-background sm:w-40"
-                />
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                  <Input
+                    id="symbolFilter"
+                    placeholder="Search..."
+                    value={symbolFilter}
+                    onChange={e => {
+                      setPageIndex(0)
+                      setSymbolFilter(e.target.value)
+                    }}
+                    className="h-8 w-32 pl-8 bg-muted/30 focus:bg-background text-xs border-border/60"
+                  />
+                </div>
               </div>
             </div>
 
-            <ActiveFilters
-              filters={appliedFilters}
-              onRemove={key => {
-                setDraftRequest(prev => ({
-                  ...prev,
-                  [key]:
-                    definition.defaultRequest[
-                      key as keyof typeof definition.defaultRequest
-                    ],
-                }))
-                setAppliedRequest(prev => ({
-                  ...prev,
-                  [key]:
-                    definition.defaultRequest[
-                      key as keyof typeof definition.defaultRequest
-                    ],
-                }))
-              }}
-            />
+            {appliedFilterCount > 0 && (
+              <div className="mt-3">
+                <ActiveFilters
+                  filters={appliedFilters}
+                  onRemove={key => {
+                    const defaultVal = definition.defaultRequest[key as keyof typeof definition.defaultRequest]
+                    setDraftRequest(prev => ({ ...prev, [key]: defaultVal }))
+                    setAppliedRequest(prev => ({ ...prev, [key]: defaultVal }))
+                  }}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* MIDDLE - Scanner Results and Filters */}
-      <div className="grid gap-2 overflow-auto">
-        <div className="grid gap-1">
-          <div className="flex items-center justify-between">
-            <h1 className="font-display text-xl">{definition.title}</h1>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => {
-                  setPageIndex(0)
-                  setAppliedRequest(draftRequest)
-                }}
-                disabled={query.isFetching}
-                size="sm"
-              >
-                Run
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => query.refetch()}
-                disabled={query.isFetching}
-              >
-                <RefreshCw
-                  className={cn('h-4 w-4', query.isFetching && 'animate-spin')}
-                />
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setDraftRequest(definition.defaultRequest)
-                  setAppliedRequest(definition.defaultRequest)
-                  setSort(definition.defaultSort)
-                  setPageIndex(0)
-                  setSymbolFilter('')
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {definition.description}
-            </p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
-              {query.dataUpdatedAt > 0 && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {new Date(query.dataUpdatedAt).toLocaleTimeString()}
+        <Card className="flex-1 min-h-0 border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
+          <CardHeader className="py-2.5 px-4 border-b border-border/40">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-sm font-semibold">Results</CardTitle>
+                <span className="text-[10px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded-full">
+                  {query.isFetching ? 'Loading...' : `${totalRows.toLocaleString()} symbols`}
                 </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="text-base">Results</CardTitle>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Rows / page
-                  </Label>
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={value => {
-                      const next = Number(value)
-                      setPageIndex(0)
-                      setDraftRequest(prev => ({
-                        ...prev,
-                        limit: next,
-                      }))
-                      setAppliedRequest(prev => ({
-                        ...prev,
-                        limit: next,
-                      }))
-                    }}
-                  >
-                    <SelectTrigger className="h-7 w-[70px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">7</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <span>
-                  {query.isFetching
-                    ? 'Loading...'
-                    : query.isError
-                      ? 'Error'
-                      : `${totalRows.toLocaleString()} rows`}
-                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-tighter">
+                  Rows
+                </Label>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={value => {
+                    const next = Number(value)
+                    setPageIndex(0)
+                    setDraftRequest(prev => ({ ...prev, limit: next }))
+                    setAppliedRequest(prev => ({ ...prev, limit: next }))
+                  }}
+                >
+                  <SelectTrigger className="h-7 w-[64px] text-[10px] border-border/60 bg-muted/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['7', '10', '25', '50', '100'].map(v => (
+                      <SelectItem key={v} value={v} className="text-xs">{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-3">
+          <CardContent className="p-0 flex flex-col h-[calc(100%-45px)]">
             {query.isError ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
                 {query.error instanceof Error
@@ -836,9 +716,10 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                               'cursor-pointer transition-colors hover:bg-muted/50',
                               isSelected && 'bg-primary/5 hover:bg-primary/10'
                             )}
-                            onClick={() =>
+                            onClick={() => {
                               setSelectedSymbol({ symbol, exchange })
-                            }
+                              setIsPanelVisible(true)
+                            }}
                           >
                             <TableCell className="w-12 text-center text-xs text-muted-foreground">
                               {currentPageIndex * pageSize + idx + 1}
@@ -851,9 +732,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                   className={cn(
                                     'whitespace-nowrap',
                                     col.align === 'right' &&
-                                      'text-right font-variant-numeric tabular-nums',
+                                    'text-right font-variant-numeric tabular-nums',
                                     col.key === 'symbol' &&
-                                      'border-r border-border'
+                                    'border-r border-border'
                                   )}
                                 >
                                   {renderCell(col.key, value)}
@@ -873,9 +754,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       {totalRows === 0
                         ? '0 rows'
                         : `${currentPageIndex * pageSize + 1}-${Math.min(
-                            (currentPageIndex + 1) * pageSize,
-                            totalRows
-                          )} of ${totalRows.toLocaleString()}`}
+                          (currentPageIndex + 1) * pageSize,
+                          totalRows
+                        )} of ${totalRows.toLocaleString()}`}
                     </div>
                     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                       <Button
@@ -921,39 +802,49 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
         </Card>
       </div>
 
-      {/* RIGHT - Chart + Trading Panel (always visible when symbol selected) */}
+      {/* RIGHT - Chart + Trading Panel Container */}
       {selectedSymbol && (
-        <div className="flex h-full flex-col overflow-hidden rounded-md border border-border/60 bg-card/60">
-          <div className="flex shrink-0 items-center justify-between border-b border-border/60 bg-card/60 px-3 py-2">
-            <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1 shadow-sm backdrop-blur">
-              <StockSymbolBadge symbol={selectedSymbol.symbol} />
-              <span className="text-xs font-bold tracking-wider">
-                {selectedSymbol.symbol}
-              </span>
-            </div>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-7 w-7 rounded-full shadow-sm"
-              onClick={() => setSelectedSymbol(null)}
-              title="Close chart"
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <div className="flex-[3] min-h-0">
-            <TradingViewChart
-              symbol={selectedSymbol.symbol}
-              exchange={selectedSymbol.exchange}
-            />
-          </div>
-          <div className="flex-[2] overflow-hidden border-t border-border/60 bg-card/60">
-            <TradingPanel
-              symbol={selectedSymbol.symbol}
-              exchange={selectedSymbol.exchange}
-              currentPrice={getCurrentPriceFromScanner(selectedSymbol.symbol)}
-              priceTimestamp={query.dataUpdatedAt}
-            />
+        <div className="relative flex h-full">
+          {/* Floating Toggle Button (Chevron) - Fixed position relative to container */}
+          <Button
+            variant="secondary"
+            size="icon"
+            className={cn(
+              'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full border border-border/60 bg-card shadow-md hover:bg-accent transition-all duration-300',
+              !isPanelVisible && 'rotate-180 bg-primary text-primary-foreground hover:bg-primary/90'
+            )}
+            onClick={() => setIsPanelVisible(!isPanelVisible)}
+            title={isPanelVisible ? 'Hide panel' : 'Show panel'}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+
+          <div
+            className={cn(
+              'flex h-full flex-col overflow-hidden rounded-md border border-border/60 bg-card/60 transition-all duration-300 ease-in-out',
+              isPanelVisible
+                ? 'w-full opacity-100'
+                : 'w-0 opacity-0 border-none select-none pointer-events-none'
+            )}
+          >
+            {isPanelVisible && (
+              <div className="flex h-full flex-col overflow-hidden min-w-[300px]">
+                <div className="flex-[5] min-h-0 border-b border-border/60">
+                  <TradingViewChart
+                    symbol={selectedSymbol.symbol}
+                    exchange={selectedSymbol.exchange}
+                  />
+                </div>
+                <div className="flex-[5] flex flex-col min-h-0 bg-card/40">
+                  <TradingPanel
+                    symbol={selectedSymbol.symbol}
+                    exchange={selectedSymbol.exchange}
+                    currentPrice={getCurrentPriceFromScanner(selectedSymbol.symbol)}
+                    priceTimestamp={query.dataUpdatedAt}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

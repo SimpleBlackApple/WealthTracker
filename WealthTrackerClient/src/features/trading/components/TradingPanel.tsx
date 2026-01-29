@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 import { useTradingContext } from '../contexts/TradingContext'
 import { usePortfolios } from '../hooks/usePortfolios'
 import { usePortfolioSummary } from '../hooks/usePortfolio'
 import { useOrderNotifications } from '../hooks/useOrderNotifications'
+import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 import { OrderForm } from './OrderForm'
 import { PortfolioSummary } from './PortfolioSummary'
 import { PositionsList } from './PositionsList'
@@ -124,50 +126,60 @@ export function TradingPanel({
   // Trade view (default)
   return (
     <div className="flex h-full flex-col">
-      {/* Header with price info and P&L - ultra compact */}
-      <div className="shrink-0 space-y-1.5 border-b border-border/60 bg-card/60 px-3 py-2">
-        {/* Price and P&L in one compact box */}
-        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-xs">
+      {/* Header with symbol, price info and P&L - ultra compact */}
+      <div className="shrink-0 border-b border-border/60 bg-card/60 px-3 py-2">
+        <div className="flex items-center gap-2 mb-2">
+          <StockSymbolBadge symbol={symbol} />
+          <span className="text-xs font-bold tracking-wider">{symbol}</span>
+        </div>
+
+        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[11px]">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Price</span>
-            <span className="font-medium">
-              {currentPrice != null ? `$${currentPrice.toFixed(2)}` : 'N/A'}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Price</span>
+              <span className="font-bold">
+                {currentPrice != null ? `$${currentPrice.toFixed(2)}` : 'N/A'}
+              </span>
+            </div>
+            <span className="text-[9px] text-muted-foreground/60 tabular-nums">
               {formatUpdatedAgo(priceTimestamp, now)}
             </span>
           </div>
-          <div className="mt-1 flex items-center justify-between border-t border-border/60 pt-1">
-            <span className="text-[10px] text-muted-foreground">
-              Today's P&L
-            </span>
-            <div className="flex items-center gap-3">
-              <span
-                className={
-                  todayPnL.realized > 0
-                    ? 'text-xs font-medium text-gain'
-                    : todayPnL.realized < 0
-                      ? 'text-xs font-medium text-loss'
-                      : 'text-xs font-medium'
-                }
-              >
-                R: {todayPnL.realized > 0 ? '+' : ''}$
-                {todayPnL.realized.toFixed(2)}
+          <div className="mt-1 flex flex-col gap-0.5 border-t border-border/60 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">Unrealized P&L</span>
+              <span className={cn(
+                "font-medium",
+                todayPnL.unrealized > 0 ? 'text-gain' : todayPnL.unrealized < 0 ? 'text-loss' : 'text-muted-foreground'
+              )}>
+                {todayPnL.unrealized >= 0 ? '+' : ''}${Math.abs(todayPnL.unrealized).toFixed(2)}
               </span>
-              <span
-                className={
-                  todayPnL.unrealized > 0
-                    ? 'text-xs font-medium text-gain'
-                    : todayPnL.unrealized < 0
-                      ? 'text-xs font-medium text-loss'
-                      : 'text-xs font-medium'
-                }
-              >
-                U: {todayPnL.unrealized > 0 ? '+' : ''}$
-                {todayPnL.unrealized.toFixed(2)}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">Realized P&L</span>
+              <span className={cn(
+                "font-medium",
+                todayPnL.realized > 0 ? 'text-gain' : todayPnL.realized < 0 ? 'text-loss' : 'text-muted-foreground'
+              )}>
+                {todayPnL.realized >= 0 ? '+' : ''}${Math.abs(todayPnL.realized).toFixed(2)}
               </span>
             </div>
           </div>
+          {summaryQuery.data?.positions?.some(p => p.symbol === symbol) && (
+            <div className="mt-1 border-t border-border/40 pt-1 flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">Position</span>
+              {summaryQuery.data.positions
+                .filter(p => p.symbol === symbol)
+                .map(p => (
+                  <span key={p.symbol} className={cn(
+                    "font-bold",
+                    (p.unrealizedPL ?? 0) > 0 ? 'text-gain' : (p.unrealizedPL ?? 0) < 0 ? 'text-loss' : ''
+                  )}>
+                    {p.quantity} @ ${p.averageCost.toFixed(2)}
+                  </span>
+                ))}
+            </div>
+          )}
         </div>
       </div>
 
