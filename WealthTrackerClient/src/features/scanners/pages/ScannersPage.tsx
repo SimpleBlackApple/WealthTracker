@@ -48,6 +48,7 @@ import { FilterChip } from '@/features/scanners/components/FilterChip'
 import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 import { TableSkeleton } from '@/features/scanners/components/TableSkeleton'
 import { TradingViewChart } from '@/features/scanners/components/TradingViewChart'
+import { TradingPanel } from '@/features/trading/components/TradingPanel'
 import { scannerService } from '@/features/scanners/services/scannerService'
 import {
   SCANNERS,
@@ -149,6 +150,12 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     () => (query.data?.results ?? []) as Record<string, unknown>[],
     [query.data?.results]
   )
+
+  const getCurrentPriceFromScanner = (symbol: string): number | null => {
+    const row = rows.find(r => String(r.symbol) === symbol)
+    const price = row?.price
+    return typeof price === 'number' && Number.isFinite(price) ? price : null
+  }
 
   const filteredRows = useMemo(() => {
     const q = String(symbolFilter || '')
@@ -971,10 +978,20 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          <div className="flex-1">
+                          <div className="flex-[3] min-h-0">
                             <TradingViewChart
                               symbol={selectedSymbol.symbol}
                               exchange={selectedSymbol.exchange}
+                            />
+                          </div>
+                          <div className="flex-[2] overflow-y-auto border-t border-border/60 bg-card/60">
+                            <TradingPanel
+                              symbol={selectedSymbol.symbol}
+                              exchange={selectedSymbol.exchange}
+                              currentPrice={getCurrentPriceFromScanner(
+                                selectedSymbol.symbol
+                              )}
+                              priceTimestamp={query.dataUpdatedAt}
                             />
                           </div>
                         </div>

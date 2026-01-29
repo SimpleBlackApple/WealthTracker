@@ -38,6 +38,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Register JWT service
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddScoped<IGoogleAuthService, GoogleAuthService>();
+builder.Services.AddScoped<ISimulationTradingService, SimulationTradingService>();
 
 // Configure JWT Authentication
 var publicKeyPath = builder.Configuration["Authentication:Jwt:RsaPublicKeyPath"];
