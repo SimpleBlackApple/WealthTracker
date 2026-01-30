@@ -12,6 +12,14 @@ vi.mock('@/features/scanners/services/scannerService', () => ({
   },
 }))
 
+vi.mock('@/features/trading/components/TradingPanel', () => ({
+  TradingPanel: () => <div data-testid="trading-panel" />,
+}))
+
+vi.mock('@/features/scanners/components/TradingViewChart', () => ({
+  TradingViewChart: () => <div data-testid="tradingview-chart" />,
+}))
+
 const sampleResponse = {
   scanner: 'day_gainers',
   sorted_by: 'change_pct',

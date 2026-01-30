@@ -7,7 +7,10 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
     <div className="relative w-full overflow-auto">
       <table
         data-slot="table"
-        className={cn('w-full caption-bottom text-sm tabular-nums', className)}
+        className={cn(
+          'w-full caption-bottom text-sm tabular-nums [border-collapse:separate] [border-spacing:0]',
+          className
+        )}
         {...props}
       />
     </div>
@@ -18,7 +21,10 @@ function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('[&_tr]:border-b', className)}
+      className={cn(
+        'sticky top-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 [&_tr]:border-b [&_tr]:border-border/60',
+        className
+      )}
       {...props}
     />
   )
@@ -60,7 +66,7 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
     <tr
       data-slot="table-row"
       className={cn(
-        'border-b transition-colors hover:bg-accent/50 data-[state=selected]:bg-accent/60',
+        'border-b border-border/60 transition-colors hover:bg-accent/60 data-[state=selected]:bg-accent',
         className
       )}
       {...props}
@@ -73,7 +79,7 @@ function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
     <th
       data-slot="table-head"
       className={cn(
-        'h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0',
+        'h-9 px-2 text-left align-middle text-[11px] font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0',
         className
       )}
       {...props}

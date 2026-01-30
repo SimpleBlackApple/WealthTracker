@@ -7,9 +7,7 @@ interface TradingContextValue {
   setActiveView: (view: 'trade' | 'portfolio' | 'history') => void
 }
 
-const TradingContext = createContext<TradingContextValue | undefined>(
-  undefined
-)
+const TradingContext = createContext<TradingContextValue | undefined>(undefined)
 
 export function TradingProvider({ children }: { children: ReactNode }) {
   const [activePortfolioId, setActivePortfolioId] = useState<number | null>(

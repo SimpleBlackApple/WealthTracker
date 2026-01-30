@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { OrderForm } from './OrderForm'
@@ -33,13 +33,15 @@ describe('OrderForm', () => {
       </ToastProvider>
     )
 
-    await user.type(screen.getByLabelText(/quantity/i), '10')
+    fireEvent.change(screen.getByLabelText(/quantity/i), {
+      target: { value: '10' },
+    })
 
-    await user.click(screen.getByRole('combobox'))
+    await user.click(screen.getByRole('combobox', { name: /type/i }))
     const listbox = screen.getByRole('listbox')
     await user.click(within(listbox).getByText('Limit'))
 
-    await user.click(screen.getByRole('button', { name: 'Execute' }))
+    await user.click(screen.getByRole('button', { name: /execute/i }))
 
     expect(
       screen.getByText('Limit price is required for limit orders.')
@@ -60,8 +62,10 @@ describe('OrderForm', () => {
       </ToastProvider>
     )
 
-    await user.type(screen.getByLabelText(/quantity/i), '5')
-    await user.click(screen.getByRole('button', { name: 'Execute' }))
+    fireEvent.change(screen.getByLabelText(/quantity/i), {
+      target: { value: '5' },
+    })
+    await user.click(screen.getByRole('button', { name: /execute/i }))
 
     expect(mutate).toHaveBeenCalledWith(
       {

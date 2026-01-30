@@ -24,9 +24,9 @@ export function ActiveFilters({ filters, onRemove }: ActiveFiltersProps) {
         <Badge
           key={filter.key}
           variant="secondary"
-          className="gap-1.5 border border-border/60 bg-card/70 pr-1 text-xs font-medium shadow-sm"
+          className="gap-1.5 pr-1 text-xs"
         >
-          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {filter.label}
           </span>
           <span className="font-medium">

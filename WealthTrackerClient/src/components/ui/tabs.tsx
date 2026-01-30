@@ -40,7 +40,7 @@ export function TabsList({
     <div
       role="tablist"
       className={cn(
-        'rounded-lg border border-border/60 bg-muted/30 p-1',
+        'rounded-xl border border-border/70 bg-secondary/60 p-1 shadow-xs',
         className
       )}
       {...props}
@@ -65,9 +65,9 @@ export function TabsTrigger({
       aria-selected={selected}
       data-state={selected ? 'active' : 'inactive'}
       className={cn(
-        'inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        selected && 'bg-background text-foreground shadow-sm',
+        'inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors',
+        'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25',
+        selected && 'bg-card text-foreground shadow-sm shadow-black/5',
         className
       )}
       onClick={() => context.onValueChange(value)}

@@ -149,7 +149,7 @@ export const useAuthStore = create<AuthState>(set => ({
       }
     }
   },
-  updateUser: (user) => {
+  updateUser: user => {
     localStorage.setItem('user', JSON.stringify(user))
     set({ user })
   },

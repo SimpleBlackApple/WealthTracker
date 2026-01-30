@@ -50,13 +50,6 @@ export function OrderForm({
   const { toast } = useToast()
   const executeTrade = useExecuteTrade()
 
-  // Auto-set limit price to current price when switching to limit order
-  useEffect(() => {
-    if (orderType === 'limit' && currentPrice && limitPrice === null) {
-      setLimitPrice(currentPrice)
-    }
-  }, [orderType, currentPrice, limitPrice])
-
   const feeEstimate = useMemo(() => {
     if (!currentPrice || quantity <= 0) return null
 
@@ -104,7 +97,12 @@ export function OrderForm({
 
   const executeButtonText = useMemo(() => {
     const actionText = action.toUpperCase()
-    const typeText = orderType === 'market' ? 'MARKET' : orderType === 'limit' ? 'LIMIT' : 'STOP LOSS'
+    const typeText =
+      orderType === 'market'
+        ? 'MARKET'
+        : orderType === 'limit'
+          ? 'LIMIT'
+          : 'STOP LOSS'
     return `EXECUTE ${actionText} ${typeText}`
   }, [action, orderType])
 
@@ -119,12 +117,18 @@ export function OrderForm({
 
     if (!canSubmit) return
 
-    if (orderType === 'limit' && (!limitPrice || !Number.isFinite(limitPrice))) {
+    if (
+      orderType === 'limit' &&
+      (!limitPrice || !Number.isFinite(limitPrice))
+    ) {
       setLocalError('Limit price is required for limit orders.')
       return
     }
 
-    if (orderType === 'stopLoss' && (!stopPrice || !Number.isFinite(stopPrice))) {
+    if (
+      orderType === 'stopLoss' &&
+      (!stopPrice || !Number.isFinite(stopPrice))
+    ) {
       setLocalError('Stop price is required for stop-loss orders.')
       return
     }
@@ -160,7 +164,9 @@ export function OrderForm({
             description: `${tx.type.toUpperCase()} ${tx.quantity} ${tx.symbol} @ ${toMoney(tx.price)} • Fees ${toMoney(tx.fee)}`,
             variant:
               status === 'executed'
-                ? (tx.type === 'sell' || tx.type === 'short' ? 'destructive' : 'success')
+                ? tx.type === 'sell' || tx.type === 'short'
+                  ? 'destructive'
+                  : 'success'
                 : status === 'cancelled'
                   ? 'warning'
                   : status === 'failed'
@@ -190,18 +196,21 @@ export function OrderForm({
 
   return (
     <form onSubmit={onSubmit} className="flex h-full flex-col">
-      <div className="flex-1 space-y-2 overflow-y-auto px-3 pt-2">
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {/* Order Action & Type - Side by side */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-0.5">
-            <Label htmlFor="action" className="text-[9px] text-muted-foreground uppercase font-semibold">
+            <Label
+              htmlFor="action"
+              className="text-xs font-semibold text-muted-foreground"
+            >
               Action
             </Label>
             <Select
               value={action}
               onValueChange={v => setAction(v as TransactionType)}
             >
-              <SelectTrigger id="action" className="h-7 text-xs px-2">
+              <SelectTrigger id="action" className="h-8 px-2 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -214,14 +223,20 @@ export function OrderForm({
           </div>
 
           <div className="space-y-0.5">
-            <Label htmlFor="orderType" className="text-[9px] text-muted-foreground uppercase font-semibold">
+            <Label
+              htmlFor="orderType"
+              className="text-xs font-semibold text-muted-foreground"
+            >
               Type
             </Label>
             <Select
               value={orderType}
-              onValueChange={v => setOrderType(v as OrderType)}
+              onValueChange={value => {
+                const next = value as OrderType
+                setOrderType(next)
+              }}
             >
-              <SelectTrigger id="orderType" className="h-7 text-xs px-2">
+              <SelectTrigger id="orderType" className="h-8 px-2 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -235,7 +250,7 @@ export function OrderForm({
 
         {(action === 'short' || action === 'cover') && (
           <Alert variant="destructive">
-            <AlertDescription className="text-[10px]">
+            <AlertDescription className="text-xs">
               Short selling has unlimited loss potential. Borrow fees apply.
             </AlertDescription>
           </Alert>
@@ -244,7 +259,10 @@ export function OrderForm({
         {/* Quantity & Price - Side by side */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-0.5">
-            <Label htmlFor="quantity" className="text-[9px] text-muted-foreground uppercase font-semibold">
+            <Label
+              htmlFor="quantity"
+              className="text-xs font-semibold text-muted-foreground"
+            >
               Quantity
             </Label>
             <div className="flex gap-1">
@@ -252,7 +270,7 @@ export function OrderForm({
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-7 w-7 shrink-0"
+                className="h-8 w-8 shrink-0"
                 onClick={() => setQuantity(q => Math.max(1, q - 10))}
               >
                 <Minus className="h-3 w-3" />
@@ -262,14 +280,16 @@ export function OrderForm({
                 type="number"
                 min="1"
                 value={quantity}
-                onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-                className="h-7 text-center text-[11px] px-1"
+                onChange={e =>
+                  setQuantity(Math.max(1, Number(e.target.value) || 1))
+                }
+                className="h-8 px-1 text-center text-sm"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-7 w-7 shrink-0"
+                className="h-8 w-8 shrink-0"
                 onClick={() => setQuantity(q => q + 10)}
               >
                 <Plus className="h-3 w-3" />
@@ -279,7 +299,10 @@ export function OrderForm({
 
           {orderType !== 'market' && (
             <div className="space-y-0.5">
-              <Label htmlFor="priceInput" className="text-[9px] text-muted-foreground uppercase font-semibold">
+              <Label
+                htmlFor="priceInput"
+                className="text-xs font-semibold text-muted-foreground"
+              >
                 {orderType === 'limit' ? 'Limit Price' : 'Stop Price'}
               </Label>
               <div className="flex gap-1">
@@ -287,10 +310,16 @@ export function OrderForm({
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-7 w-7 shrink-0"
+                  className="h-8 w-8 shrink-0"
                   onClick={() => {
-                    if (orderType === 'limit') setLimitPrice(p => Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01))
-                    else setStopPrice(p => Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01))
+                    if (orderType === 'limit')
+                      setLimitPrice(p =>
+                        Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01)
+                      )
+                    else
+                      setStopPrice(p =>
+                        Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01)
+                      )
                   }}
                 >
                   <Minus className="h-3 w-3" />
@@ -301,20 +330,22 @@ export function OrderForm({
                   step="0.01"
                   value={(orderType === 'limit' ? limitPrice : stopPrice) ?? ''}
                   onChange={e => {
-                    const val = e.target.value === '' ? null : Number(e.target.value)
+                    const val =
+                      e.target.value === '' ? null : Number(e.target.value)
                     if (orderType === 'limit') setLimitPrice(val)
                     else setStopPrice(val)
                   }}
-                  className="h-7 text-center text-[11px] px-1"
+                  className="h-8 px-1 text-center text-sm"
                   placeholder={currentPrice?.toFixed(2)}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-7 w-7 shrink-0"
+                  className="h-8 w-8 shrink-0"
                   onClick={() => {
-                    if (orderType === 'limit') setLimitPrice(p => (p ?? currentPrice ?? 0) + 0.01)
+                    if (orderType === 'limit')
+                      setLimitPrice(p => (p ?? currentPrice ?? 0) + 0.01)
                     else setStopPrice(p => (p ?? currentPrice ?? 0) + 0.01)
                   }}
                 >
@@ -328,25 +359,29 @@ export function OrderForm({
         {/* Fee & Summary - Combined into one row/area */}
         <div className="grid grid-cols-2 gap-2">
           {feeEstimate && (
-            <div className="rounded-md border border-border/40 bg-muted/20 px-2 py-1.5 text-[11px] flex flex-col justify-center">
-              <div className="flex justify-between items-center text-muted-foreground">
-                <span className="text-[9px] uppercase font-semibold">Fees</span>
-                <span className="font-bold text-foreground text-xs">{toMoney(feeEstimate.totalFees)}</span>
+            <div className="flex flex-col justify-center rounded-lg border border-border/70 bg-secondary/40 px-3 py-2">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="text-xs font-semibold">Fees</span>
+                <span className="text-sm font-semibold text-foreground tabular-nums">
+                  {toMoney(feeEstimate.totalFees)}
+                </span>
               </div>
-              <div className="flex justify-between items-center text-[8px] text-muted-foreground/60 leading-tight">
+              <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
                 <span>Comm: {toMoney(feeEstimate.commission)}</span>
-                {action === 'short' && <span>Loc: {toMoney(feeEstimate.locateFee)}</span>}
+                {action === 'short' && (
+                  <span>Loc: {toMoney(feeEstimate.locateFee)}</span>
+                )}
               </div>
             </div>
           )}
-          <div className="rounded-md border border-border/40 bg-card/40 px-2 py-1.5 text-[11px] flex flex-col justify-center">
-            <div className="flex justify-between items-center text-muted-foreground">
-              <span className="text-[9px] uppercase font-semibold">Total</span>
-              <span className="font-bold text-foreground text-xs">
+          <div className="flex flex-col justify-center rounded-lg border border-border/70 bg-card px-3 py-2">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-semibold">Total</span>
+              <span className="text-sm font-semibold text-foreground tabular-nums">
                 {totalEstimate != null ? toMoney(totalEstimate) : '—'}
               </span>
             </div>
-            <div className="text-[8px] text-right text-muted-foreground/60">
+            <div className="mt-1 text-[11px] text-right text-muted-foreground">
               {symbol}
             </div>
           </div>
@@ -354,7 +389,7 @@ export function OrderForm({
 
         {errorMessage && (
           <Alert variant="destructive">
-            <AlertDescription className="text-[10px]">
+            <AlertDescription className="text-xs">
               {errorMessage}
             </AlertDescription>
           </Alert>
@@ -362,11 +397,11 @@ export function OrderForm({
       </div>
 
       {/* Fixed Execute Button at Bottom */}
-      <div className="shrink-0 border-t border-border/60 bg-card/60 p-2">
+      <div className="shrink-0 border-t border-border/70 bg-card p-3">
         <Button
           type="submit"
           disabled={!canSubmit || executeTrade.isPending}
-          className="h-9 w-full text-xs font-semibold"
+          className="h-10 w-full text-sm"
         >
           {executeTrade.isPending ? 'Executing...' : executeButtonText}
         </Button>

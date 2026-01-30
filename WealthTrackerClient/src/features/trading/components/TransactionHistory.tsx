@@ -22,8 +22,12 @@ function money(value: number) {
 
 export function TransactionHistory({
   portfolioId,
+  showContainer = true,
+  showHeader = true,
 }: {
   portfolioId: number | null
+  showContainer?: boolean
+  showHeader?: boolean
 }) {
   const [page, setPage] = useState(1)
   const pageSize = 25
@@ -31,29 +35,33 @@ export function TransactionHistory({
   const query = useTransactions(portfolioId, page, pageSize)
   const rows = useMemo(() => query.data ?? [], [query.data])
 
-  return (
-    <div className="rounded-md border border-border/60 bg-card/60">
-      <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-        <div className="text-xs font-semibold">Transaction History</div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1 || query.isLoading}
-          >
-            Prev
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => p + 1)}
-            disabled={rows.length < pageSize || query.isLoading}
-          >
-            Next
-          </Button>
+  const content = (
+    <>
+      {showHeader && (
+        <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+          <div className="text-sm font-semibold">Transaction history</div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1 || query.isLoading}
+            >
+              Prev
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => setPage(p => p + 1)}
+              disabled={rows.length < pageSize || query.isLoading}
+            >
+              Next
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="overflow-auto">
         <Table>
@@ -74,23 +82,25 @@ export function TransactionHistory({
               <TableRow>
                 <TableCell
                   colSpan={8}
-                  className="py-6 text-center text-sm text-muted-foreground"
+                  className="py-8 text-center text-sm text-muted-foreground"
                 >
-                  Loading...
+                  Loading…
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={8}
-                  className="py-6 text-center text-sm text-muted-foreground"
+                  className="py-8 text-center text-sm text-muted-foreground"
                 >
                   No transactions yet.
                 </TableCell>
               </TableRow>
             ) : (
               rows.map(t => {
-                const type = String(t.type ?? '').trim().toLowerCase()
+                const type = String(t.type ?? '')
+                  .trim()
+                  .toLowerCase()
                 const isBuy = type === 'buy' || type === 'cover'
                 const isSell = type === 'sell' || type === 'short'
 
@@ -99,22 +109,28 @@ export function TransactionHistory({
                     key={t.id}
                     className={cn(
                       'transition-colors',
-                      isBuy && 'bg-gain/20 hover:bg-gain/30',
-                      isSell && 'bg-loss/10 hover:bg-loss/20'
+                      isBuy && 'bg-gain/5 hover:bg-gain/10',
+                      isSell && 'bg-loss/5 hover:bg-loss/10'
                     )}
                   >
-                    <TableCell className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
+                    <TableCell className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                       {new Date(t.createdAt).toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      <span className={cn(
-                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                        isBuy ? "bg-gain/20 text-gain" : "bg-loss/20 text-loss"
-                      )}>
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
+                          isBuy && 'border-gain/25 bg-gain/10 text-gain',
+                          isSell && 'border-loss/25 bg-loss/10 text-loss',
+                          !isBuy &&
+                            !isSell &&
+                            'border-border/70 bg-secondary/60'
+                        )}
+                      >
                         {t.type}
                       </span>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap font-bold">
+                    <TableCell className="whitespace-nowrap font-semibold">
                       {t.symbol}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
@@ -126,15 +142,19 @@ export function TransactionHistory({
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {money(t.fee)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-bold">
+                    <TableCell className="text-right tabular-nums font-semibold">
                       {money(t.totalAmount)}
                     </TableCell>
                     <TableCell>
-                      <span className={cn(
-                        "inline-flex h-2 w-2 rounded-full mr-2",
-                        t.status === 'executed' ? "bg-gain" : "bg-muted-foreground/30"
-                      )} />
-                      <span className="text-[10px] uppercase font-bold tracking-tight text-muted-foreground">
+                      <span
+                        className={cn(
+                          'mr-2 inline-flex h-2 w-2 rounded-full',
+                          t.status === 'executed'
+                            ? 'bg-gain'
+                            : 'bg-muted-foreground/40'
+                        )}
+                      />
+                      <span className="text-xs text-muted-foreground">
                         {t.status}
                       </span>
                     </TableCell>
@@ -145,6 +165,14 @@ export function TransactionHistory({
           </TableBody>
         </Table>
       </div>
+    </>
+  )
+
+  if (!showContainer) return content
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      {content}
     </div>
   )
 }

@@ -189,10 +189,10 @@ function ToastCard({
   const secondsAgo = Math.max(0, Math.floor((now - item.createdAt) / 1000))
 
   const variantStyles: Record<ToastVariant, string> = {
-    default: 'border-border/60 bg-background/90',
-    success: 'border-emerald-500/30 bg-emerald-500/10',
-    warning: 'border-amber-500/30 bg-amber-500/10',
-    destructive: 'border-red-500/30 bg-red-500/10',
+    default: 'border-border/70 bg-card/95',
+    success: 'border-gain/25 bg-gain/10',
+    warning: 'border-amber-500/25 bg-amber-500/10',
+    destructive: 'border-loss/25 bg-loss/10',
   }
 
   return (

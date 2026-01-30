@@ -13,10 +13,10 @@ export function Alert({
     <div
       role="alert"
       className={cn(
-        'rounded-lg border px-3 py-2 text-sm',
+        'rounded-xl border px-3 py-2 text-sm',
         variant === 'destructive' &&
-          'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-200',
-        variant === 'default' && 'border-border/60 bg-card/60',
+          'border-destructive/30 bg-destructive/10 text-destructive',
+        variant === 'default' && 'border-border/70 bg-card',
         className
       )}
       {...props}

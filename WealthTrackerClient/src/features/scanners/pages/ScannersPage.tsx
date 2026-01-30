@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  ChevronLeft,
   ChevronRight,
   Clock,
   RefreshCw,
@@ -89,12 +88,20 @@ function coerceInt(value: string, fallback: number) {
   return Math.trunc(coerceNumber(value, fallback))
 }
 
-function ScannerGridSkeleton({ columns, rows, isPanelVisible }: { columns: number, rows: number, isPanelVisible: boolean }) {
+function ScannerGridSkeleton({
+  columns,
+  rows,
+  isPanelVisible,
+}: {
+  columns: number
+  rows: number
+  isPanelVisible: boolean
+}) {
   return (
     <div className="flex h-full gap-4 w-full animate-in fade-in duration-500">
       <div className="flex flex-1 flex-col gap-2 overflow-hidden">
         {/* Filters Area Skeleton */}
-        <div className="shrink-0 bg-card/40 rounded-lg border border-border/60 p-4">
+        <div className="shrink-0 bg-card rounded-xl border border-border/70 p-4">
           <div className="flex items-center justify-between mb-6">
             <div className="space-y-2">
               <Skeleton className="h-7 w-48" />
@@ -115,8 +122,8 @@ function ScannerGridSkeleton({ columns, rows, isPanelVisible }: { columns: numbe
         </div>
 
         {/* Results Area Skeleton */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-card/40 rounded-lg border border-border/60">
-          <div className="p-4 border-b border-border/40 flex items-center justify-between">
+        <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-xl border border-border/70">
+          <div className="p-4 border-b border-border/70 flex items-center justify-between">
             <Skeleton className="h-5 w-32" />
             <Skeleton className="h-6 w-20" />
           </div>
@@ -126,16 +133,16 @@ function ScannerGridSkeleton({ columns, rows, isPanelVisible }: { columns: numbe
 
       {isPanelVisible && (
         <div className="w-[450px] lg:w-[600px] flex flex-col gap-4 shrink-0 transition-all">
-          <div className="flex-[5] rounded-md border border-border/60 bg-card/60 overflow-hidden relative">
+          <div className="flex-[5] rounded-xl border border-border/70 bg-card overflow-hidden relative">
             <Skeleton className="h-full w-full opacity-40" />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-2">
-                <div className="h-8 w-32 bg-muted/20 rounded animate-pulse" />
-                <div className="h-4 w-48 bg-muted/10 rounded animate-pulse" />
+                <Skeleton className="h-8 w-32 rounded-md" />
+                <Skeleton className="h-4 w-48 rounded-md" />
               </div>
             </div>
           </div>
-          <div className="flex-[5] rounded-md border border-border/60 bg-card/60 overflow-hidden">
+          <div className="flex-[5] rounded-xl border border-border/70 bg-card overflow-hidden">
             <div className="p-4 space-y-6">
               <div className="flex items-center gap-3">
                 <Skeleton className="h-10 w-10 rounded-full" />
@@ -258,17 +265,16 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     return sortedRows.slice(start, start + pageSize)
   }, [currentPageIndex, pageSize, sortedRows])
 
-  // Auto-select first result by default
-  useEffect(() => {
-    if (query.isSuccess && sortedRows.length > 0 && !selectedSymbol) {
-      const first = sortedRows[0]
-      setSelectedSymbol({
-        symbol: String(first.symbol),
-        exchange: (first as { exchange?: string }).exchange || null,
-      })
-      setIsPanelVisible(true)
+  const defaultSelectedSymbol = useMemo(() => {
+    if (sortedRows.length === 0) return null
+    const first = sortedRows[0]
+    return {
+      symbol: String(first.symbol),
+      exchange: (first as { exchange?: string }).exchange || null,
     }
-  }, [query.isSuccess, sortedRows, selectedSymbol])
+  }, [sortedRows])
+
+  const effectiveSelectedSymbol = selectedSymbol ?? defaultSelectedSymbol
 
   const appliedFilters = useMemo(() => {
     const filters = [
@@ -387,13 +393,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     return String(value)
   }
 
-  const showSkeleton = query.isLoading || (query.isFetching && rows.length === 0)
+  const showSkeleton =
+    query.isLoading || (query.isFetching && rows.length === 0)
 
   return (
     <div
       className={cn(
         'grid h-[calc(100vh-5rem)] gap-2 transition-all duration-300 ease-in-out',
-        (selectedSymbol || showSkeleton)
+        effectiveSelectedSymbol || showSkeleton
           ? isPanelVisible
             ? 'lg:grid-cols-[240px_1fr_minmax(400px,600px)]'
             : 'lg:grid-cols-[240px_1fr_12px]'
@@ -402,9 +409,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     >
       {/* LEFT SIDEBAR - Scanner List */}
       <div className="grid gap-2 overflow-auto pr-1">
-        <Card className="border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-          <CardHeader className="pb-3 border-b border-border/40">
-            <CardTitle className="text-sm font-semibold tracking-tight">Scanners</CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-border/70 p-4">
+            <CardTitle className="text-sm font-semibold">Scanners</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-1 p-2">
             {SCANNERS.map(s => (
@@ -413,8 +420,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 to={`/scanners/${s.id}`}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground',
-                    isActive && 'bg-muted/60 font-semibold text-foreground border border-border/40'
+                    'relative rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
+                    isActive &&
+                      'bg-secondary font-semibold text-foreground before:absolute before:left-2 before:top-2 before:bottom-2 before:w-1 before:rounded-full before:bg-primary'
                   )
                 }
               >
@@ -441,17 +449,19 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
         <>
           {/* MIDDLE - Scanner Results and Filters */}
           <div className="flex flex-col gap-2 overflow-hidden">
-            <Card className="shrink-0 border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-              <CardHeader className="pb-2 pt-4 px-4">
+            <Card className="shrink-0">
+              <CardHeader className="border-b border-border/70 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="font-display text-xl">{definition.title}</CardTitle>
+                    <CardTitle className="font-display text-xl">
+                      {definition.title}
+                    </CardTitle>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {definition.description}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="mr-2 flex items-center gap-2 text-[10px] text-muted-foreground/60 border-r border-border/60 pr-4">
+                    <div className="mr-2 flex items-center gap-2 border-r border-border/70 pr-4 text-xs text-muted-foreground">
                       <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
                       {query.dataUpdatedAt > 0 && (
                         <span className="flex items-center gap-1">
@@ -463,6 +473,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     <Button
                       onClick={() => {
                         setPageIndex(0)
+                        setSelectedSymbol(null)
+                        setIsPanelVisible(true)
                         setAppliedRequest(draftRequest)
                       }}
                       disabled={query.isFetching}
@@ -479,14 +491,19 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       disabled={query.isFetching}
                     >
                       <RefreshCw
-                        className={cn('h-3.5 w-3.5', query.isFetching && 'animate-spin')}
+                        className={cn(
+                          'h-3.5 w-3.5',
+                          query.isFetching && 'animate-spin'
+                        )}
                       />
                     </Button>
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
                       className="h-8"
                       onClick={() => {
+                        setSelectedSymbol(null)
+                        setIsPanelVisible(true)
                         setDraftRequest(definition.defaultRequest)
                         setAppliedRequest(definition.defaultRequest)
                         setSort(definition.defaultSort)
@@ -499,18 +516,18 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="px-4 pb-4 pt-2">
+              <CardContent className="px-4 pb-4 pt-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+                    <span className="text-xs font-semibold text-muted-foreground">
                       Filters
                     </span>
                     <span
                       className={cn(
-                        'rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                        'rounded-full border px-2 py-0.5 text-xs font-semibold',
                         appliedFilterCount > 0
                           ? 'border-primary/40 bg-primary/10 text-primary'
-                          : 'border-border/60 text-muted-foreground'
+                          : 'border-border/70 bg-card text-muted-foreground'
                       )}
                     >
                       {appliedFilterCount}
@@ -518,22 +535,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   </div>
 
                   <div className="relative flex-1 min-w-[200px] max-w-2xl">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute -left-2 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border bg-card/90 shadow-sm transition-opacity opacity-0 hover:opacity-100 md:flex hidden"
-                      onClick={() => {
-                        const el = document.getElementById('filter-scroll-container')
-                        if (el) el.scrollBy({ left: -150, behavior: 'smooth' })
-                      }}
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </Button>
-
                     <div
                       id="filter-scroll-container"
-                      className="flex items-center gap-2 overflow-x-auto no-scrollbar md:pb-0"
-                      style={{ scrollbarWidth: 'none' }}
+                      className="wt-scrollbar-x flex items-center gap-2 overflow-x-auto pb-2 pr-1 md:pb-0"
                     >
                       <Popover>
                         <PopoverTrigger asChild>
@@ -546,16 +550,44 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         <PopoverContent className="w-56 p-3">
                           <div className="grid gap-3">
                             <div className="grid gap-1">
-                              <Label htmlFor="minPrice" className="text-xs">Min price</Label>
-                              <Input id="minPrice" type="number" step="0.01" value={String(draftRequest.minPrice)}
-                                onChange={e => setDraftRequest(prev => ({ ...prev, minPrice: coerceNumber(e.target.value, prev.minPrice) }))}
+                              <Label htmlFor="minPrice" className="text-xs">
+                                Min price
+                              </Label>
+                              <Input
+                                id="minPrice"
+                                type="number"
+                                step="0.01"
+                                value={String(draftRequest.minPrice)}
+                                onChange={e =>
+                                  setDraftRequest(prev => ({
+                                    ...prev,
+                                    minPrice: coerceNumber(
+                                      e.target.value,
+                                      prev.minPrice
+                                    ),
+                                  }))
+                                }
                                 className="h-8"
                               />
                             </div>
                             <div className="grid gap-1">
-                              <Label htmlFor="maxPrice" className="text-xs">Max price</Label>
-                              <Input id="maxPrice" type="number" step="0.01" value={String(draftRequest.maxPrice)}
-                                onChange={e => setDraftRequest(prev => ({ ...prev, maxPrice: coerceNumber(e.target.value, prev.maxPrice) }))}
+                              <Label htmlFor="maxPrice" className="text-xs">
+                                Max price
+                              </Label>
+                              <Input
+                                id="maxPrice"
+                                type="number"
+                                step="0.01"
+                                value={String(draftRequest.maxPrice)}
+                                onChange={e =>
+                                  setDraftRequest(prev => ({
+                                    ...prev,
+                                    maxPrice: coerceNumber(
+                                      e.target.value,
+                                      prev.maxPrice
+                                    ),
+                                  }))
+                                }
                                 className="h-8"
                               />
                             </div>
@@ -568,14 +600,31 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                           <FilterChip
                             label="Avg Vol"
                             value={formatCompact(draftRequest.minAvgVol)}
-                            defaultValue={formatCompact(definition.defaultRequest.minAvgVol)}
+                            defaultValue={formatCompact(
+                              definition.defaultRequest.minAvgVol
+                            )}
                           />
                         </PopoverTrigger>
                         <PopoverContent className="w-48 p-3">
                           <div className="grid gap-2">
-                            <Label htmlFor="minAvgVol" className="text-xs">Min avg vol</Label>
-                            <Input id="minAvgVol" type="number" min={0} step={10000} value={String(draftRequest.minAvgVol)}
-                              onChange={e => setDraftRequest(prev => ({ ...prev, minAvgVol: coerceInt(e.target.value, prev.minAvgVol) }))}
+                            <Label htmlFor="minAvgVol" className="text-xs">
+                              Min avg vol
+                            </Label>
+                            <Input
+                              id="minAvgVol"
+                              type="number"
+                              min={0}
+                              step={10000}
+                              value={String(draftRequest.minAvgVol)}
+                              onChange={e =>
+                                setDraftRequest(prev => ({
+                                  ...prev,
+                                  minAvgVol: coerceInt(
+                                    e.target.value,
+                                    prev.minAvgVol
+                                  ),
+                                }))
+                              }
                               className="h-8"
                             />
                           </div>
@@ -592,9 +641,23 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         </PopoverTrigger>
                         <PopoverContent className="w-40 p-3">
                           <div className="grid gap-2">
-                            <Label htmlFor="minChangePct" className="text-xs">Min change %</Label>
-                            <Input id="minChangePct" type="number" step="0.1" value={String(draftRequest.minChangePct)}
-                              onChange={e => setDraftRequest(prev => ({ ...prev, minChangePct: coerceNumber(e.target.value, prev.minChangePct) }))}
+                            <Label htmlFor="minChangePct" className="text-xs">
+                              Min change %
+                            </Label>
+                            <Input
+                              id="minChangePct"
+                              type="number"
+                              step="0.1"
+                              value={String(draftRequest.minChangePct)}
+                              onChange={e =>
+                                setDraftRequest(prev => ({
+                                  ...prev,
+                                  minChangePct: coerceNumber(
+                                    e.target.value,
+                                    prev.minChangePct
+                                  ),
+                                }))
+                              }
                               className="h-8"
                             />
                           </div>
@@ -612,12 +675,26 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         <PopoverContent className="w-40 p-3">
                           <div className="grid gap-2">
                             <Label className="text-xs">Interval</Label>
-                            <Select value={draftRequest.interval} onValueChange={value => setDraftRequest(prev => ({ ...prev, interval: value }))}>
-                              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                            <Select
+                              value={draftRequest.interval}
+                              onValueChange={value =>
+                                setDraftRequest(prev => ({
+                                  ...prev,
+                                  interval: value,
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue />
+                              </SelectTrigger>
                               <SelectContent>
-                                {['1m', '2m', '5m', '15m', '30m', '60m'].map(v => (
-                                  <SelectItem key={v} value={v}>{v}</SelectItem>
-                                ))}
+                                {['1m', '2m', '5m', '15m', '30m', '60m'].map(
+                                  v => (
+                                    <SelectItem key={v} value={v}>
+                                      {v}
+                                    </SelectItem>
+                                  )
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
@@ -629,19 +706,47 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                           <PopoverTrigger asChild>
                             <FilterChip
                               label="Volume"
-                              value={formatCompact((draftRequest as ScannerRequestById['day-gainers']).minTodayVolume)}
-                              defaultValue={formatCompact((definition.defaultRequest as ScannerRequestById['day-gainers']).minTodayVolume)}
+                              value={formatCompact(
+                                (
+                                  draftRequest as ScannerRequestById['day-gainers']
+                                ).minTodayVolume
+                              )}
+                              defaultValue={formatCompact(
+                                (
+                                  definition.defaultRequest as ScannerRequestById['day-gainers']
+                                ).minTodayVolume
+                              )}
                             />
                           </PopoverTrigger>
                           <PopoverContent className="w-48 p-3">
                             <div className="grid gap-2">
-                              <Label htmlFor="minTodayVolume" className="text-xs">Min today volume</Label>
-                              <Input id="minTodayVolume" type="number" min={0} step={10000}
-                                value={String((draftRequest as ScannerRequestById['day-gainers']).minTodayVolume)}
-                                onChange={e => setDraftRequest(prev => ({
-                                  ...prev,
-                                  minTodayVolume: coerceInt(e.target.value, (prev as ScannerRequestById['day-gainers']).minTodayVolume),
-                                }))}
+                              <Label
+                                htmlFor="minTodayVolume"
+                                className="text-xs"
+                              >
+                                Min today volume
+                              </Label>
+                              <Input
+                                id="minTodayVolume"
+                                type="number"
+                                min={0}
+                                step={10000}
+                                value={String(
+                                  (
+                                    draftRequest as ScannerRequestById['day-gainers']
+                                  ).minTodayVolume
+                                )}
+                                onChange={e =>
+                                  setDraftRequest(prev => ({
+                                    ...prev,
+                                    minTodayVolume: coerceInt(
+                                      e.target.value,
+                                      (
+                                        prev as ScannerRequestById['day-gainers']
+                                      ).minTodayVolume
+                                    ),
+                                  }))
+                                }
                                 className="h-8"
                               />
                             </div>
@@ -649,22 +754,13 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         </Popover>
                       )}
                     </div>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute -right-2 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border bg-card/90 shadow-sm transition-opacity opacity-0 hover:opacity-100 md:flex hidden"
-                      onClick={() => {
-                        const el = document.getElementById('filter-scroll-container')
-                        if (el) el.scrollBy({ left: 150, behavior: 'smooth' })
-                      }}
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="symbolFilter" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+                    <Label
+                      htmlFor="symbolFilter"
+                      className="text-xs font-semibold text-muted-foreground"
+                    >
                       Symbol
                     </Label>
                     <div className="relative">
@@ -675,9 +771,11 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         value={symbolFilter}
                         onChange={e => {
                           setPageIndex(0)
+                          setSelectedSymbol(null)
+                          setIsPanelVisible(true)
                           setSymbolFilter(e.target.value)
                         }}
-                        className="h-8 w-32 pl-8 bg-muted/30 focus:bg-background text-xs border-border/60"
+                        className="h-8 w-36 pl-8"
                       />
                     </div>
                   </div>
@@ -688,9 +786,18 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     <ActiveFilters
                       filters={appliedFilters}
                       onRemove={key => {
-                        const defaultVal = definition.defaultRequest[key as keyof typeof definition.defaultRequest]
-                        setDraftRequest(prev => ({ ...prev, [key]: defaultVal }))
-                        setAppliedRequest(prev => ({ ...prev, [key]: defaultVal }))
+                        const defaultVal =
+                          definition.defaultRequest[
+                            key as keyof typeof definition.defaultRequest
+                          ]
+                        setDraftRequest(prev => ({
+                          ...prev,
+                          [key]: defaultVal,
+                        }))
+                        setAppliedRequest(prev => ({
+                          ...prev,
+                          [key]: defaultVal,
+                        }))
                       }}
                     />
                   </div>
@@ -698,17 +805,21 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
               </CardContent>
             </Card>
 
-            <Card className="flex-1 min-h-0 border-border/60 bg-card/80 shadow-sm animate-in fade-in-50">
-              <CardHeader className="py-2.5 px-4 border-b border-border/40">
+            <Card className="flex-1 min-h-0">
+              <CardHeader className="border-b border-border/70 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <CardTitle className="text-sm font-semibold">Results</CardTitle>
-                    <span className="text-[10px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded-full">
-                      {query.isFetching ? 'Loading...' : `${totalRows.toLocaleString()} symbols`}
+                    <CardTitle className="text-sm font-semibold">
+                      Results
+                    </CardTitle>
+                    <span className="rounded-full border border-border/70 bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground">
+                      {query.isFetching
+                        ? 'Loading...'
+                        : `${totalRows.toLocaleString()} symbols`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-tighter">
+                    <Label className="text-xs font-semibold text-muted-foreground">
                       Rows
                     </Label>
                     <Select
@@ -716,16 +827,20 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       onValueChange={value => {
                         const next = Number(value)
                         setPageIndex(0)
+                        setSelectedSymbol(null)
+                        setIsPanelVisible(true)
                         setDraftRequest(prev => ({ ...prev, limit: next }))
                         setAppliedRequest(prev => ({ ...prev, limit: next }))
                       }}
                     >
-                      <SelectTrigger className="h-7 w-[64px] text-[10px] border-border/60 bg-muted/20">
+                      <SelectTrigger className="h-8 w-[76px] bg-card text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {['7', '10', '25', '50', '100'].map(v => (
-                          <SelectItem key={v} value={v} className="text-xs">{v}</SelectItem>
+                          <SelectItem key={v} value={v} className="text-xs">
+                            {v}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -745,9 +860,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     rows={pageSize}
                   />
                 ) : (
-                  <div className="overflow-hidden rounded-md border border-border/60 bg-card/60">
+                  <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
                     <Table>
-                      <TableHeader className="sticky top-0 z-10 bg-card/90 backdrop-blur">
+                      <TableHeader>
                         <TableRow>
                           <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
                             #
@@ -765,7 +880,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                 className={cn(
                                   'whitespace-nowrap',
                                   col.align === 'right' && 'text-right',
-                                  col.key === 'symbol' && 'border-r border-border'
+                                  col.key === 'symbol' &&
+                                    'border-r border-border'
                                 )}
                               >
                                 <button
@@ -773,7 +889,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                   onClick={() => toggleSort(col.key)}
                                   aria-label={`Sort by ${col.header}`}
                                   className={cn(
-                                    'inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground',
+                                    'inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground',
                                     active && 'text-foreground'
                                   )}
                                 >
@@ -802,13 +918,15 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                             const symbol = String(row.symbol)
                             const exchange =
                               (row as { exchange?: string }).exchange || null
-                            const isSelected = selectedSymbol?.symbol === symbol
+                            const isSelected =
+                              effectiveSelectedSymbol?.symbol === symbol
                             return (
                               <TableRow
                                 key={`${symbol}-${idx}`}
                                 className={cn(
-                                  'cursor-pointer transition-colors hover:bg-muted/50',
-                                  isSelected && 'bg-primary/5 hover:bg-primary/10'
+                                  'cursor-pointer transition-colors hover:bg-secondary/60',
+                                  isSelected &&
+                                    'bg-primary/5 hover:bg-primary/10'
                                 )}
                                 onClick={() => {
                                   setSelectedSymbol({ symbol, exchange })
@@ -826,9 +944,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                       className={cn(
                                         'whitespace-nowrap',
                                         col.align === 'right' &&
-                                        'text-right font-variant-numeric tabular-nums',
+                                          'text-right font-variant-numeric tabular-nums',
                                         col.key === 'symbol' &&
-                                        'border-r border-border'
+                                          'border-r border-border'
                                       )}
                                     >
                                       {renderCell(col.key, value)}
@@ -842,15 +960,15 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       </TableBody>
                     </Table>
 
-                    <div className="border-t border-border/60 bg-card/60 px-3 py-2 pr-6">
+                    <div className="border-t border-border/70 bg-card px-3 py-2 pr-6">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="w-full text-xs text-muted-foreground sm:w-auto">
                           {totalRows === 0
                             ? '0 rows'
                             : `${currentPageIndex * pageSize + 1}-${Math.min(
-                              (currentPageIndex + 1) * pageSize,
-                              totalRows
-                            )} of ${totalRows.toLocaleString()}`}
+                                (currentPageIndex + 1) * pageSize,
+                                totalRows
+                              )} of ${totalRows.toLocaleString()}`}
                         </div>
                         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                           <Button
@@ -864,7 +982,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPageIndex(p => Math.max(0, p - 1))}
+                            onClick={() =>
+                              setPageIndex(p => Math.max(0, p - 1))
+                            }
                             disabled={currentPageIndex === 0}
                           >
                             Prev
@@ -897,15 +1017,16 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
           </div>
 
           {/* RIGHT - Chart + Trading Panel Container */}
-          {selectedSymbol && (
+          {effectiveSelectedSymbol && (
             <div className="relative flex h-full">
               {/* Floating Toggle Button (Chevron) - Fixed position relative to container */}
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
                 className={cn(
-                  'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full border border-border/60 bg-card shadow-md hover:bg-accent transition-all duration-300',
-                  !isPanelVisible && 'rotate-180 bg-primary text-primary-foreground hover:bg-primary/90'
+                  'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full bg-card shadow-md shadow-black/10 transition-all duration-300',
+                  !isPanelVisible &&
+                    'rotate-180 bg-primary text-primary-foreground hover:bg-primary/90'
                 )}
                 onClick={() => setIsPanelVisible(!isPanelVisible)}
                 title={isPanelVisible ? 'Hide panel' : 'Show panel'}
@@ -915,7 +1036,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
               <div
                 className={cn(
-                  'flex h-full flex-col overflow-hidden rounded-md border border-border/60 bg-card/60 transition-all duration-300 ease-in-out',
+                  'flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card transition-all duration-300 ease-in-out',
                   isPanelVisible
                     ? 'w-full opacity-100'
                     : 'w-0 opacity-0 border-none select-none pointer-events-none'
@@ -923,17 +1044,19 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
               >
                 {isPanelVisible && (
                   <div className="flex h-full flex-col overflow-hidden min-w-[300px]">
-                    <div className="flex-[5] min-h-0 border-b border-border/60">
+                    <div className="flex-[5] min-h-0 border-b border-border/70">
                       <TradingViewChart
-                        symbol={selectedSymbol.symbol}
-                        exchange={selectedSymbol.exchange}
+                        symbol={effectiveSelectedSymbol.symbol}
+                        exchange={effectiveSelectedSymbol.exchange}
                       />
                     </div>
-                    <div className="flex-[5] flex flex-col min-h-0 bg-card/40">
+                    <div className="flex flex-[5] min-h-0 flex-col bg-card">
                       <TradingPanel
-                        symbol={selectedSymbol.symbol}
-                        exchange={selectedSymbol.exchange}
-                        currentPrice={getCurrentPriceFromScanner(selectedSymbol.symbol)}
+                        symbol={effectiveSelectedSymbol.symbol}
+                        exchange={effectiveSelectedSymbol.exchange}
+                        currentPrice={getCurrentPriceFromScanner(
+                          effectiveSelectedSymbol.symbol
+                        )}
                         priceTimestamp={query.dataUpdatedAt}
                       />
                     </div>

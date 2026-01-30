@@ -71,10 +71,13 @@ export function AuthCallback() {
   }, [searchParams, loginWithGoogle, navigate, isAuthenticated])
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto" />
-        <p className="mt-4 text-gray-600">Completing sign in...</p>
+    <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+      <div className="w-full max-w-sm rounded-2xl border border-border/70 bg-card p-6 text-center shadow-lg shadow-black/5">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-primary/25 border-t-primary" />
+        <p className="mt-4 text-sm font-semibold">Completing sign in…</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Redirecting you back to the app.
+        </p>
       </div>
     </div>
   )

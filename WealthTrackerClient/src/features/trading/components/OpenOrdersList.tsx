@@ -23,9 +23,13 @@ function money(value: number | null | undefined) {
 export function OpenOrdersList({
   portfolioId,
   onGoToPortfolio,
+  showContainer = true,
+  showHeader = true,
 }: {
   portfolioId: number | null
   onGoToPortfolio?: () => void
+  showContainer?: boolean
+  showHeader?: boolean
 }) {
   const query = useOpenOrders(portfolioId, { refetchInterval: 5000 })
   const cancel = useCancelOrder()
@@ -33,11 +37,13 @@ export function OpenOrdersList({
 
   const orders = query.data ?? []
 
-  return (
-    <div className="rounded-md border border-border/60 bg-card/60">
-      <div className="border-b border-border/60 px-3 py-2 text-xs font-semibold">
-        Open Orders ({orders.length})
-      </div>
+  const content = (
+    <>
+      {showHeader && (
+        <div className="border-b border-border/70 px-4 py-3 text-sm font-semibold">
+          Open orders ({orders.length})
+        </div>
+      )}
 
       <div className="overflow-auto">
         <Table>
@@ -57,23 +63,25 @@ export function OpenOrdersList({
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-6 text-center text-sm text-muted-foreground"
+                  className="py-8 text-center text-sm text-muted-foreground"
                 >
-                  Loading...
+                  Loading…
                 </TableCell>
               </TableRow>
             ) : orders.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-6 text-center text-sm text-muted-foreground"
+                  className="py-8 text-center text-sm text-muted-foreground"
                 >
                   No open orders.
                 </TableCell>
               </TableRow>
             ) : (
               orders.map(o => {
-                const type = String(o.type ?? '').trim().toLowerCase()
+                const type = String(o.type ?? '')
+                  .trim()
+                  .toLowerCase()
                 const isBuy = type === 'buy' || type === 'cover'
                 const isSell = type === 'sell' || type === 'short'
 
@@ -81,21 +89,16 @@ export function OpenOrdersList({
                   <TableRow
                     key={o.id}
                     className={cn(
-                      "transition-colors",
-                      isBuy && "bg-gain/20 hover:bg-gain/30",
-                      isSell && "bg-loss/10 hover:bg-loss/20"
+                      'transition-colors',
+                      isBuy && 'bg-gain/5 hover:bg-gain/10',
+                      isSell && 'bg-loss/5 hover:bg-loss/10'
                     )}
                   >
-                    <TableCell className="font-bold">{o.symbol}</TableCell>
-                    <TableCell>
-                      <span className={cn(
-                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                        isBuy ? "bg-gain/20 text-gain" : "bg-loss/20 text-loss"
-                      )}>
-                        {o.type}
-                      </span>
+                    <TableCell className="font-semibold">{o.symbol}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {o.type}
                     </TableCell>
-                    <TableCell className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">
+                    <TableCell className="text-sm text-muted-foreground">
                       {o.orderType}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
@@ -111,7 +114,7 @@ export function OpenOrdersList({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-loss hover:bg-loss/10"
+                        className="h-8 px-3 text-xs"
                         disabled={portfolioId == null || cancel.isPending}
                         onClick={() => {
                           if (!portfolioId) return
@@ -121,7 +124,7 @@ export function OpenOrdersList({
                               onSuccess: () => {
                                 toast({
                                   title: 'Order cancelled',
-                                  description: `${o.type.toUpperCase()} ${o.quantity} ${o.symbol} • ${o.orderType}`,
+                                  description: `${o.type.toUpperCase()} ${o.quantity} ${o.symbol} — ${o.orderType}`,
                                   variant: 'warning',
                                   sound: 'warning',
                                   actionLabel: 'View portfolio',
@@ -142,6 +145,14 @@ export function OpenOrdersList({
           </TableBody>
         </Table>
       </div>
+    </>
+  )
+
+  if (!showContainer) return content
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      {content}
     </div>
   )
 }
