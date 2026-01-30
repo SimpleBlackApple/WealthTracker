@@ -1,3 +1,13 @@
+import {
+  Activity,
+  ArrowUpToLine,
+  BarChart3,
+  Compass,
+  type LucideIcon,
+  Target,
+  TrendingUp,
+} from 'lucide-react'
+
 export type ScannerId =
   | 'day-gainers'
   | 'hod-breakouts'
@@ -141,6 +151,7 @@ export type ColumnDef<TRow> = {
 
 export type ScannerDefinition<TScannerId extends ScannerId> = {
   id: TScannerId
+  icon: LucideIcon
   title: string
   description: string
   defaultRequest: ScannerRequestById[TScannerId]
@@ -168,6 +179,7 @@ const defineScanner = <TScannerId extends ScannerId>(
 export const SCANNERS = [
   defineScanner({
     id: 'day-gainers',
+    icon: TrendingUp,
     title: 'Day Gainers',
     description: 'Regular-session gainers with liquidity and price filters.',
     defaultRequest: {
@@ -213,6 +225,7 @@ export const SCANNERS = [
   }),
   defineScanner({
     id: 'hod-breakouts',
+    icon: ArrowUpToLine,
     title: 'HOD Breakouts',
     description: 'Names breaking HOD now with strong volume + momentum.',
     defaultRequest: {
@@ -276,6 +289,7 @@ export const SCANNERS = [
   }),
   defineScanner({
     id: 'vwap-breakouts',
+    icon: Activity,
     title: 'VWAP Breakouts',
     description: 'Names reclaiming/holding VWAP with strong volume + momentum.',
     defaultRequest: {
@@ -326,6 +340,7 @@ export const SCANNERS = [
   }),
   defineScanner({
     id: 'volume-spikes',
+    icon: BarChart3,
     title: 'Volume Spikes',
     description: 'High relative-volume movers with a minimum gain threshold.',
     defaultRequest: {
@@ -365,6 +380,7 @@ export const SCANNERS = [
   }),
   defineScanner({
     id: 'hod-approach',
+    icon: Compass,
     title: 'HOD Approach',
     description: 'Near-breakout setups approaching HOD.',
     defaultRequest: {
@@ -411,6 +427,7 @@ export const SCANNERS = [
   }),
   defineScanner({
     id: 'vwap-approach',
+    icon: Target,
     title: 'VWAP Approach',
     description: 'Near-breakout setups approaching VWAP.',
     defaultRequest: {

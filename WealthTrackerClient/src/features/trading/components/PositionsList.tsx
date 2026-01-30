@@ -6,8 +6,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 
 import type { PositionWithPL } from '../types/trading'
 
@@ -39,13 +39,25 @@ export function PositionsList({
       <div className="overflow-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Avg</TableHead>
-              <TableHead className="text-right">Last</TableHead>
-              <TableHead className="text-right">Unrealized PnL</TableHead>
-              <TableHead className="text-right">Realized PnL</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Symbol
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Qty
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Avg
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Last
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Unrealized PnL
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Realized PnL
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -82,43 +94,48 @@ export function PositionsList({
                 return (
                   <TableRow
                     key={`${p.positionId}-${p.symbol}`}
-                    className={cn(
-                      'transition-colors',
-                      p.isShort ? 'hover:bg-loss/5' : 'hover:bg-primary/5'
-                    )}
+                    className="group border-none hover:bg-muted/30"
                   >
-                    <TableCell className="font-semibold">
-                      <div className="flex items-center gap-2">
-                        <span className="tracking-tight">{p.symbol}</span>
-                        <Badge
-                          variant={p.isShort ? 'destructive' : 'default'}
-                          className="h-5 px-2 text-[10px]"
-                        >
-                          {p.isShort ? 'Short' : 'Long'}
-                        </Badge>
+                    <TableCell className="py-2.5 pl-0">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-1 rounded-r-full bg-primary/60" />
+                        <StockSymbolBadge symbol={p.symbol} />
+                        <div className="flex flex-col">
+                          <span className="text-[13px] font-semibold leading-none">
+                            {p.symbol}
+                          </span>
+                          <span
+                            className={cn(
+                              'mt-1 w-fit rounded-sm px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tighter text-white',
+                              p.isShort ? 'bg-loss' : 'bg-gain'
+                            )}
+                          >
+                            {p.isShort ? 'Short' : 'Long'}
+                          </span>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
+                    <TableCell className="py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] font-medium">
                       {p.quantity}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] text-muted-foreground">
                       {money(p.averageCost)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">
+                    <TableCell className="py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] font-semibold">
                       {money(p.currentPrice)}
                     </TableCell>
                     <TableCell
                       className={cn(
-                        'text-right tabular-nums font-semibold',
+                        'py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] font-semibold',
                         unrealizedColor
                       )}
                     >
-                      <div className="flex flex-col items-end">
+                      <div className="flex flex-col items-end leading-none">
                         <span>
                           {unrealized == null ? '—' : money(unrealized)}
                         </span>
                         {p.unrealizedPLPercentage != null && (
-                          <span className="text-[11px] opacity-80">
+                          <span className="mt-1 text-[10px] opacity-80">
                             {p.unrealizedPLPercentage > 0 ? '+' : ''}
                             {(p.unrealizedPLPercentage * 100).toFixed(2)}%
                           </span>
@@ -126,7 +143,10 @@ export function PositionsList({
                       </div>
                     </TableCell>
                     <TableCell
-                      className={cn('text-right tabular-nums', realizedColor)}
+                      className={cn(
+                        'py-2.5 border-l border-border/50 text-right tabular-nums text-[12px]',
+                        realizedColor
+                      )}
                     >
                       {money(realized)}
                     </TableCell>

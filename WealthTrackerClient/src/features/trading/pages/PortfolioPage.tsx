@@ -43,9 +43,9 @@ export function PortfolioPage() {
         error={summaryQuery.error as Error | null}
       />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 p-4">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 p-4 shrink-0">
             <div className="flex items-center gap-2">
               <LayoutGrid className="h-4 w-4 text-primary" />
               <CardTitle className="text-sm">Positions</CardTitle>
@@ -54,7 +54,7 @@ export function PortfolioPage() {
               {(summaryQuery.data?.positions.length ?? 0).toLocaleString()}
             </Badge>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="flex-1 p-0 overflow-auto">
             <PositionsList
               positions={summaryQuery.data?.positions ?? []}
               showContainer={false}
@@ -63,14 +63,14 @@ export function PortfolioPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 p-4">
+        <Card className="flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/70 p-4 shrink-0">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Clock className="h-4 w-4 text-primary" />
               <CardTitle className="text-sm">Open orders</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="flex-1 p-0 overflow-auto">
             <OpenOrdersList
               portfolioId={resolvedPortfolioId}
               onGoToPortfolio={() => {}}

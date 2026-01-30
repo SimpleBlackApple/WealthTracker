@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { useTransactions } from '../hooks/useTrades'
+import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 
 function money(value: number) {
   return value.toLocaleString(undefined, {
@@ -66,15 +67,31 @@ export function TransactionHistory({
       <div className="overflow-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Symbol</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right">Fees</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Status</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Date
+              </TableHead>
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Type
+              </TableHead>
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Symbol
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Qty
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Price
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Fees
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Amount
+              </TableHead>
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Status
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody striped={false}>
@@ -107,56 +124,62 @@ export function TransactionHistory({
                 return (
                   <TableRow
                     key={t.id}
-                    className={cn(
-                      'transition-colors',
-                      isBuy && 'bg-gain/5 hover:bg-gain/10',
-                      isSell && 'bg-loss/5 hover:bg-loss/10'
-                    )}
+                    className="group border-none hover:bg-muted/30"
                   >
-                    <TableCell className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
-                      {new Date(t.createdAt).toLocaleString()}
+                    <TableCell className="py-2 text-[11px] tabular-nums text-muted-foreground">
+                      {new Date(t.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
                       <span
                         className={cn(
-                          'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
-                          isBuy && 'border-gain/25 bg-gain/10 text-gain',
-                          isSell && 'border-loss/25 bg-loss/10 text-loss',
-                          !isBuy &&
-                            !isSell &&
-                            'border-border/70 bg-secondary/60'
+                          'inline-flex min-w-[50px] justify-center rounded-sm px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tight text-white',
+                          isBuy
+                            ? 'bg-gain'
+                            : isSell
+                              ? 'bg-loss'
+                              : 'bg-muted-foreground/60'
                         )}
                       >
                         {t.type}
                       </span>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap font-semibold">
-                      {t.symbol}
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-2">
+                        <StockSymbolBadge
+                          symbol={t.symbol}
+                          className="h-4 w-4 text-[9px]"
+                        />
+                        <span className="text-[12px] font-semibold">
+                          {t.symbol}
+                        </span>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
+                    <TableCell className="py-2 text-right tabular-nums text-[12px] font-medium">
                       {t.quantity}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="py-2 text-right tabular-nums text-[12px] text-muted-foreground">
                       {money(t.price)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="py-2 text-right tabular-nums text-[12px] text-muted-foreground">
                       {money(t.fee)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">
+                    <TableCell className="py-2 text-right tabular-nums text-[12px] font-semibold text-foreground">
                       {money(t.totalAmount)}
                     </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          'mr-2 inline-flex h-2 w-2 rounded-full',
-                          t.status === 'executed'
-                            ? 'bg-gain'
-                            : 'bg-muted-foreground/40'
-                        )}
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {t.status}
-                      </span>
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            'h-1.5 w-1.5 rounded-full',
+                            t.status === 'executed'
+                              ? 'bg-gain'
+                              : 'bg-muted-foreground/40'
+                          )}
+                        />
+                        <span className="text-[10px] font-medium uppercase tracking-tight text-muted-foreground">
+                          {t.status}
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )

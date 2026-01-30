@@ -408,10 +408,12 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
       )}
     >
       {/* LEFT SIDEBAR - Scanner List */}
-      <div className="grid gap-2 overflow-auto pr-1">
-        <Card className="overflow-hidden">
+      <div className="grid gap-2 overflow-auto pr-1 bg-sidebar rounded-xl border border-border/70">
+        <Card className="overflow-hidden border-none bg-transparent shadow-none">
           <CardHeader className="border-b border-border/70 p-4">
-            <CardTitle className="text-sm font-semibold">Scanners</CardTitle>
+            <CardTitle className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+              Scanners
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-1 p-2">
             {SCANNERS.map(s => (
@@ -420,16 +422,29 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 to={`/scanners/${s.id}`}
                 className={({ isActive }) =>
                   cn(
-                    'relative rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
-                    isActive &&
-                      'bg-secondary font-semibold text-foreground before:absolute before:left-2 before:top-2 before:bottom-2 before:w-1 before:rounded-full before:bg-primary'
+                    'relative flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-all hover:bg-white/40',
+                    isActive
+                      ? 'bg-sidebar-active font-semibold text-foreground'
+                      : 'text-muted-foreground'
                   )
                 }
               >
-                <div className="leading-4">{s.title}</div>
-                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground/70">
-                  {s.description}
-                </div>
+                {({ isActive }) => (
+                  <>
+                    <s.icon
+                      className={cn(
+                        'h-5 w-5 shrink-0 mt-0.5',
+                        isActive ? 'text-primary' : 'text-muted-foreground/60'
+                      )}
+                    />
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="leading-tight truncate">{s.title}</div>
+                      <div className="line-clamp-2 text-[11px] text-muted-foreground/70 font-normal leading-normal">
+                        {s.description}
+                      </div>
+                    </div>
+                  </>
+                )}
               </NavLink>
             ))}
           </CardContent>
@@ -453,10 +468,10 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
               <CardHeader className="border-b border-border/70 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="font-display text-xl">
+                    <CardTitle className="font-display text-lg">
                       {definition.title}
                     </CardTitle>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {definition.description}
                     </p>
                   </div>
@@ -479,7 +494,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       }}
                       disabled={query.isFetching}
                       size="sm"
-                      className="h-8 px-4"
+                      className="h-8 px-4 bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
                     >
                       Run
                     </Button>
@@ -519,7 +534,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
               <CardContent className="px-4 pb-4 pt-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-muted-foreground">
+                    <span className="text-[11px] font-semibold text-muted-foreground">
                       Filters
                     </span>
                     <span
@@ -1024,9 +1039,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 variant="outline"
                 size="icon"
                 className={cn(
-                  'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full bg-card shadow-md shadow-black/10 transition-all duration-300',
+                  'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full bg-card shadow-md shadow-black/10 transition-all duration-300 border border-border/70',
                   !isPanelVisible &&
-                    'rotate-180 bg-primary text-primary-foreground hover:bg-primary/90'
+                    'rotate-180 bg-secondary text-foreground hover:bg-secondary/80'
                 )}
                 onClick={() => setIsPanelVisible(!isPanelVisible)}
                 title={isPanelVisible ? 'Hide panel' : 'Show panel'}

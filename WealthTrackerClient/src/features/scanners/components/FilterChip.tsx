@@ -21,7 +21,7 @@ export const FilterChip = forwardRef<HTMLButtonElement, Props>(
         type="button"
         {...props}
         className={cn(
-          'flex items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors',
+          'flex items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-colors',
           isModified
             ? 'border-primary/30 bg-primary/10 text-primary'
             : 'border-border/70 bg-card text-muted-foreground hover:bg-secondary/50 hover:text-foreground',

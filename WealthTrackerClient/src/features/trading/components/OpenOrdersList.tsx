@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { useCancelOrder, useOpenOrders } from '../hooks/useOrders'
+import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
 
 function money(value: number | null | undefined) {
   if (value == null || Number.isNaN(value)) return '—'
@@ -48,14 +49,28 @@ export function OpenOrdersList({
       <div className="overflow-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Order</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Limit</TableHead>
-              <TableHead className="text-right">Stop</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Symbol
+              </TableHead>
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Type
+              </TableHead>
+              <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Order
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Qty
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Limit
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Stop
+              </TableHead>
+              <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                Action
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody striped={false}>
@@ -88,29 +103,44 @@ export function OpenOrdersList({
                 return (
                   <TableRow
                     key={o.id}
-                    className={cn(
-                      'transition-colors',
-                      isBuy && 'bg-gain/5 hover:bg-gain/10',
-                      isSell && 'bg-loss/5 hover:bg-loss/10'
-                    )}
+                    className="group border-none hover:bg-muted/30"
                   >
-                    <TableCell className="font-semibold">{o.symbol}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {o.type}
+                    <TableCell className="py-2.5 pl-0">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-1 rounded-r-full bg-primary/60" />
+                        <StockSymbolBadge symbol={o.symbol} />
+                        <span className="text-[12px] font-semibold">
+                          {o.symbol}
+                        </span>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="py-2.5 border-l border-border/50">
+                      <span
+                        className={cn(
+                          'inline-flex min-w-[50px] justify-center rounded-sm px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tight text-white',
+                          isBuy
+                            ? 'bg-gain'
+                            : isSell
+                              ? 'bg-loss'
+                              : 'bg-muted-foreground/60'
+                        )}
+                      >
+                        {o.type}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-2.5 border-l border-border/50 text-[11px] font-medium uppercase tracking-tight text-muted-foreground">
                       {o.orderType}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
+                    <TableCell className="py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] font-medium">
                       {o.quantity}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] text-muted-foreground">
                       {money(o.limitPrice)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="py-2.5 border-l border-border/50 text-right tabular-nums text-[12px] text-muted-foreground">
                       {money(o.stopPrice)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right border-l border-border/50">
                       <Button
                         variant="ghost"
                         size="sm"

@@ -73,7 +73,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/70 bg-card">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-header">
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-3">
             <Link
@@ -81,7 +81,7 @@ export function AppShell() {
               className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-secondary/50"
               aria-label="WealthTracker home"
             >
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm shadow-black/5">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary-light text-primary-foreground shadow-sm shadow-primary/20">
                 <span className="text-xs font-bold">WT</span>
               </div>
               <div className="hidden sm:flex flex-col leading-tight">

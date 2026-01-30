@@ -45,25 +45,27 @@ function StatCard({
 
   return (
     <Card className="overflow-hidden">
-      {accentClass && <div className={cn('h-1 w-full', accentClass)} />}
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-muted-foreground">
-              {label}
+      <div className="flex">
+        {accentClass && <div className={cn('w-1 h-full', accentClass)} />}
+        <CardContent className="flex-1 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-muted-foreground">
+                {label}
+              </div>
+              <div className="mt-2 text-xl font-semibold tracking-tight">
+                {value}
+              </div>
+              {meta && (
+                <div className="mt-1 text-xs text-muted-foreground">{meta}</div>
+              )}
             </div>
-            <div className="mt-2 text-xl font-semibold tracking-tight">
-              {value}
-            </div>
-            {meta && (
-              <div className="mt-1 text-xs text-muted-foreground">{meta}</div>
+            {icon && (
+              <div className="mt-0.5 text-muted-foreground/70">{icon}</div>
             )}
           </div>
-          {icon && (
-            <div className="mt-0.5 text-muted-foreground/70">{icon}</div>
-          )}
-        </div>
-      </CardContent>
+        </CardContent>
+      </div>
     </Card>
   )
 }
