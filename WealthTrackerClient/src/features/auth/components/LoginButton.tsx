@@ -47,7 +47,11 @@ export function LoginButton() {
   }
 
   return (
-    <Button onClick={handleLogin} disabled={isLoading} className="w-full">
+    <Button
+      onClick={handleLogin}
+      disabled={isLoading}
+      className="w-full bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
+    >
       {isLoading ? 'Connecting...' : 'Sign in with Google'}
     </Button>
   )

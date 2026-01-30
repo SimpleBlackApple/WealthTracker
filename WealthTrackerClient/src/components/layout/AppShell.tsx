@@ -218,9 +218,8 @@ export function AppShell() {
 
                 <div className="p-3">
                   <Button
-                    variant="destructive"
                     size="sm"
-                    className="h-9 w-full gap-2"
+                    className="h-9 w-full gap-2 bg-secondary hover:bg-secondary/80 text-foreground"
                     onClick={handleLogout}
                   >
                     <LogOut className="h-4 w-4" />
@@ -290,7 +289,7 @@ export function AppShell() {
               </Button>
               <Button
                 type="button"
-                className="h-10 flex-1"
+                className="h-10 flex-1 bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
                 onClick={handleUpdateName}
                 disabled={
                   isUpdating || !newName.trim() || newName === user?.name

@@ -17,7 +17,11 @@ export function LogoutButton() {
         <span className="h-2 w-2 rounded-full bg-primary/70" />
         <span className="font-medium text-foreground/90">{user.name}</span>
       </div>
-      <Button onClick={handleLogout} variant="outline" size="sm">
+      <Button
+        onClick={handleLogout}
+        size="sm"
+        className="bg-secondary hover:bg-secondary/80 text-foreground"
+      >
         Logout
       </Button>
     </div>
