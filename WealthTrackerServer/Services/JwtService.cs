@@ -15,13 +15,22 @@ public class JwtService : IJwtService
     _configuration = configuration;
 
     var privateKeyPath = _configuration["Authentication:Jwt:RsaPrivateKeyPath"];
-    if (string.IsNullOrEmpty(privateKeyPath))
+    var privateKeyPem = _configuration["Authentication:Jwt:RsaPrivateKeyPem"];
+    if (string.IsNullOrEmpty(privateKeyPath) && string.IsNullOrEmpty(privateKeyPem))
     {
-      throw new InvalidOperationException("JWT RSA private key path is not configured");
+      throw new InvalidOperationException(
+        "JWT RSA private key is not configured (set Authentication:Jwt:RsaPrivateKeyPath or Authentication:Jwt:RsaPrivateKeyPem)");
     }
 
     _rsa = RSA.Create();
-    _rsa.ImportFromPem(File.ReadAllText(privateKeyPath));
+    if (!string.IsNullOrEmpty(privateKeyPem))
+    {
+      _rsa.ImportFromPem(privateKeyPem);
+    }
+    else
+    {
+      _rsa.ImportFromPem(File.ReadAllText(privateKeyPath!));
+    }
   }
 
   public string GenerateAccessToken(User user)
@@ -78,13 +87,22 @@ public class JwtService : IJwtService
     var audience = _configuration["Authentication:Jwt:Audience"];
 
     var publicKeyPath = _configuration["Authentication:Jwt:RsaPublicKeyPath"];
-    if (string.IsNullOrEmpty(publicKeyPath))
+    var publicKeyPem = _configuration["Authentication:Jwt:RsaPublicKeyPem"];
+    if (string.IsNullOrEmpty(publicKeyPath) && string.IsNullOrEmpty(publicKeyPem))
     {
-      throw new InvalidOperationException("JWT RSA public key path is not configured");
+      throw new InvalidOperationException(
+        "JWT RSA public key is not configured (set Authentication:Jwt:RsaPublicKeyPath or Authentication:Jwt:RsaPublicKeyPem)");
     }
 
     using var rsa = RSA.Create();
-    rsa.ImportFromPem(File.ReadAllText(publicKeyPath));
+    if (!string.IsNullOrEmpty(publicKeyPem))
+    {
+      rsa.ImportFromPem(publicKeyPem);
+    }
+    else
+    {
+      rsa.ImportFromPem(File.ReadAllText(publicKeyPath!));
+    }
 
     var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
     var validationParameters = new TokenValidationParameters

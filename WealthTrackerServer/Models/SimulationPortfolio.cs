@@ -23,11 +23,18 @@ public class SimulationPortfolio
   }
 
   // Navigation properties
+  [System.Text.Json.Serialization.JsonIgnore]
   public User User { get; set; } = null!;
+
+  [System.Text.Json.Serialization.JsonIgnore]
   public ICollection<SimulationPosition> Positions { get; set; } =
     new List<SimulationPosition>();
+
+  [System.Text.Json.Serialization.JsonIgnore]
   public ICollection<SimulationTransaction> Transactions { get; set; } =
     new List<SimulationTransaction>();
+
+  [System.Text.Json.Serialization.JsonIgnore]
   public ICollection<SimulationOrder> Orders { get; set; } =
     new List<SimulationOrder>();
 }

@@ -52,6 +52,6 @@ public class SimulationTransaction
   public DateTime? ExecutedAt { get; set; }
   public string? Notes { get; set; }
 
+  [System.Text.Json.Serialization.JsonIgnore]
   public SimulationPortfolio Portfolio { get; set; } = null!;
 }
-

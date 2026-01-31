@@ -1,0 +1,17 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.next
+**/.venv
+**/__pycache__
+**/*.user
+**/*.suo
+**/*.cache
+**/*.log
+archieve
+poc
+

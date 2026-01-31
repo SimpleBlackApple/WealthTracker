@@ -16,6 +16,6 @@ public class SimulationPosition
   public DateTime CreatedAt { get; set; }
   public DateTime UpdatedAt { get; set; }
 
+  [System.Text.Json.Serialization.JsonIgnore]
   public SimulationPortfolio Portfolio { get; set; } = null!;
 }
-

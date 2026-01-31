@@ -42,13 +42,22 @@ builder.Services.AddScoped<ISimulationTradingService, SimulationTradingService>(
 
 // Configure JWT Authentication
 var publicKeyPath = builder.Configuration["Authentication:Jwt:RsaPublicKeyPath"];
-if (string.IsNullOrEmpty(publicKeyPath))
+var publicKeyPem = builder.Configuration["Authentication:Jwt:RsaPublicKeyPem"];
+if (string.IsNullOrEmpty(publicKeyPath) && string.IsNullOrEmpty(publicKeyPem))
 {
-  throw new InvalidOperationException("JWT RSA public key path is not configured");
+  throw new InvalidOperationException(
+    "JWT RSA public key is not configured (set Authentication:Jwt:RsaPublicKeyPath or Authentication:Jwt:RsaPublicKeyPem)");
 }
 
 using var rsa = RSA.Create();
-rsa.ImportFromPem(File.ReadAllText(publicKeyPath));
+if (!string.IsNullOrEmpty(publicKeyPem))
+{
+  rsa.ImportFromPem(publicKeyPem);
+}
+else
+{
+  rsa.ImportFromPem(File.ReadAllText(publicKeyPath!));
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
   .AddJwtBearer(options =>
@@ -85,6 +94,15 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+var migrateOnStartupRaw = (builder.Configuration["MIGRATE_ON_STARTUP"] ?? "0").Trim();
+var migrateOnStartup = migrateOnStartupRaw is "1" or "true" or "True" or "yes" or "Yes";
+if (migrateOnStartup)
+{
+  using var scope = app.Services.CreateScope();
+  var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+  db.Database.Migrate();
+}
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())

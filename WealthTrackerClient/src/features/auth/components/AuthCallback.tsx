@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { getRuntimeConfig } from '@/config/runtimeConfig'
 
 export function AuthCallback() {
   const navigate = useNavigate()
@@ -56,7 +57,7 @@ export function AuthCallback() {
       }
 
       try {
-        const redirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URI
+        const redirectUri = getRuntimeConfig().googleRedirectUri || ''
         console.log('Calling loginWithGoogle with redirectUri:', redirectUri)
         await loginWithGoogle(code, redirectUri)
         console.log('Login successful')

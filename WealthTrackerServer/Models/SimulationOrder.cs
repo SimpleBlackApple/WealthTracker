@@ -25,7 +25,9 @@ public class SimulationOrder
   public DateTime? FilledAt { get; set; }
   public int? TransactionId { get; set; }
 
+  [System.Text.Json.Serialization.JsonIgnore]
   public SimulationPortfolio Portfolio { get; set; } = null!;
+
+  [System.Text.Json.Serialization.JsonIgnore]
   public SimulationTransaction? Transaction { get; set; }
 }
-

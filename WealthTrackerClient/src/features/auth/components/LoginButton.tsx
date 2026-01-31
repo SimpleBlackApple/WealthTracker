@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { getRuntimeConfig } from '@/config/runtimeConfig'
 
 declare global {
   interface Window {
@@ -20,11 +21,18 @@ export function LoginButton() {
   const handleLogin = () => {
     setIsLoading(true)
 
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-    const redirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URI
+    const { googleClientId, googleRedirectUri } = getRuntimeConfig()
+    const clientId = googleClientId
+    const redirectUri = googleRedirectUri
 
     if (!clientId) {
       console.error('Google Client ID is not configured')
+      setIsLoading(false)
+      return
+    }
+
+    if (!redirectUri) {
+      console.error('Google Redirect URI is not configured')
       setIsLoading(false)
       return
     }

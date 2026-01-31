@@ -6,17 +6,21 @@ import type {
 } from '../types/auth'
 import type { AxiosInstance, AxiosRequestConfig } from 'axios'
 import axios from 'axios'
-
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5141/api'
+import { getRuntimeConfig } from '@/config/runtimeConfig'
 
 class AuthService {
   private axiosInstance: AxiosInstance
   private authInstance: AxiosInstance
+  private apiBaseUrl: string
 
   constructor() {
+    this.apiBaseUrl =
+      getRuntimeConfig().apiBaseUrl ||
+      import.meta.env.VITE_API_BASE_URL ||
+      'http://localhost:5141/api'
+
     this.authInstance = axios.create({
-      baseURL: API_BASE,
+      baseURL: this.apiBaseUrl,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -26,7 +30,7 @@ class AuthService {
 
   private createAxiosInstance(): AxiosInstance {
     const instance = axios.create({
-      baseURL: API_BASE,
+      baseURL: this.apiBaseUrl,
       headers: {
         'Content-Type': 'application/json',
       },

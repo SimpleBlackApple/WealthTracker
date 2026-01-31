@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wealthtracker-postgres
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-WealthTracker}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  market-data-service:
+    build:
+      context: ./MarketDataService
+      dockerfile: Dockerfile
+    container_name: wealthtracker-market-data
+    environment:
+      PORT: "${MARKETDATA_CONTAINER_PORT:-8001}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      CACHE_TTL_SECONDS: "${CACHE_TTL_SECONDS:-300}"
+    ports:
+      - "${MARKETDATA_HOST_PORT:-8001}:${MARKETDATA_CONTAINER_PORT:-8001}"
+    depends_on:
+      - redis
+
+  api:
+    build:
+      context: .
+      dockerfile: WealthTrackerServer/Dockerfile
+    container_name: wealthtracker-api
+    environment:
+      PORT: "${API_CONTAINER_PORT:-5141}"
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      MIGRATE_ON_STARTUP: "${MIGRATE_ON_STARTUP:-1}"
+
+      FrontendUrl: "${FRONTEND_URL:-http://localhost:${WEB_HOST_PORT:-5173}}"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-WealthTracker};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      MarketDataService__BaseUrl: "http://market-data-service:${MARKETDATA_CONTAINER_PORT:-8001}"
+
+      Authentication__Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
+      Authentication__Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
+      Authentication__Google__RedirectUri: "${GOOGLE_REDIRECT_URI:-http://localhost:${WEB_HOST_PORT:-5173}/auth/callback}"
+
+      Authentication__Jwt__Issuer: "${JWT_ISSUER:-WealthTracker}"
+      Authentication__Jwt__Audience: "${JWT_AUDIENCE:-WealthTrackerApi}"
+      Authentication__Jwt__AccessTokenExpirationMinutes: "${JWT_ACCESS_TOKEN_EXP_MINUTES:-60}"
+      Authentication__Jwt__RefreshTokenExpirationDays: "${JWT_REFRESH_TOKEN_EXP_DAYS:-7}"
+      Authentication__Jwt__RsaPrivateKeyPath: "${JWT_RSA_PRIVATE_KEY_PATH:-/app/keys/private.pem}"
+      Authentication__Jwt__RsaPublicKeyPath: "${JWT_RSA_PUBLIC_KEY_PATH:-/app/keys/public.pem}"
+    volumes:
+      - ./WealthTrackerServer/keys:/app/keys:ro
+    ports:
+      - "${API_HOST_PORT:-5141}:${API_CONTAINER_PORT:-5141}"
+    depends_on:
+      - postgres
+      - market-data-service
+
+  web:
+    build:
+      context: ./WealthTrackerClient
+      dockerfile: Dockerfile
+    container_name: wealthtracker-web
+    environment:
+      PORT: "${WEB_CONTAINER_PORT:-8080}"
+      API_BASE_URL: "${API_BASE_URL:-http://localhost:${API_HOST_PORT:-5141}/api}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-http://localhost:${WEB_HOST_PORT:-5173}/auth/callback}"
+    ports:
+      - "${WEB_HOST_PORT:-5173}:${WEB_CONTAINER_PORT:-8080}"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+
