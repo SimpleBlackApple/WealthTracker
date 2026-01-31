@@ -94,6 +94,7 @@ export interface PortfolioSummary {
   equityValue: number
   totalPL: number
   totalPLPercentage: number
+  todayRealizedPL: number
   positions: PositionWithPL[]
 }
 

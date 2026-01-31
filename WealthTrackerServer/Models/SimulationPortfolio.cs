@@ -9,6 +9,7 @@ public class SimulationPortfolio
   public required string Name { get; set; }
   public decimal InitialCash { get; set; }
   public decimal CurrentCash { get; set; }
+  public decimal RealizedPL { get; set; }
   public DateTime CreatedAt { get; set; }
   public DateTime? LastTradeAt { get; set; }
 

@@ -34,6 +34,9 @@ public class SimulationTransaction
   public int Quantity { get; set; }
   public decimal Price { get; set; }
 
+  // Realized P&L impact of this transaction (executed trades only)
+  public decimal RealizedPL { get; set; }
+
   // Fee breakdown
   public decimal Commission { get; set; }
   public decimal TAFFee { get; set; }

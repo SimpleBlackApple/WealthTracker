@@ -255,6 +255,7 @@ public class SimulationTradingController : ControllerBase
       s.EquityValue,
       s.TotalPL,
       s.TotalPLPercentage,
+      s.TodayRealizedPL,
       s.Positions.Select(p => new PositionWithPLDto(
         p.PositionId,
         p.Symbol,
@@ -411,5 +412,5 @@ public record PortfolioSummaryDto(
   decimal EquityValue,
   decimal TotalPL,
   decimal TotalPLPercentage,
+  decimal TodayRealizedPL,
   List<PositionWithPLDto> Positions);
-

@@ -52,15 +52,15 @@ export function TradingPanel({
 
   const todayPnL = useMemo(() => {
     const summary = summaryQuery.data
-    if (!summary) return { realized: 0, unrealized: 0 }
+    if (!summary) return { todayRealized: 0, unrealized: 0 }
 
     const unrealized = summary.positions.reduce((sum, pos) => {
       return sum + (pos.unrealizedPL ?? 0)
     }, 0)
 
-    const realized = 0
+    const todayRealized = summary.todayRealizedPL ?? 0
 
-    return { realized, unrealized }
+    return { todayRealized, unrealized }
   }, [summaryQuery.data])
 
   return (
@@ -96,6 +96,19 @@ export function TradingPanel({
               <span
                 className={cn(
                   'text-sm font-semibold tabular-nums',
+                  todayPnL.todayRealized > 0
+                    ? 'text-gain'
+                    : todayPnL.todayRealized < 0
+                      ? 'text-loss'
+                      : 'text-muted-foreground'
+                )}
+              >
+                {todayPnL.todayRealized >= 0 ? '+' : '-'}$
+                {Math.abs(todayPnL.todayRealized).toFixed(2)}
+              </span>
+              <span
+                className={cn(
+                  'text-xs tabular-nums',
                   todayPnL.unrealized > 0
                     ? 'text-gain'
                     : todayPnL.unrealized < 0
@@ -103,12 +116,8 @@ export function TradingPanel({
                       : 'text-muted-foreground'
                 )}
               >
-                {todayPnL.unrealized >= 0 ? '+' : '-'}$
+                unrealized {todayPnL.unrealized >= 0 ? '+' : '-'}$
                 {Math.abs(todayPnL.unrealized).toFixed(2)}
-              </span>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                realized {todayPnL.realized >= 0 ? '+' : '-'}$
-                {Math.abs(todayPnL.realized).toFixed(2)}
               </span>
             </div>
           </div>

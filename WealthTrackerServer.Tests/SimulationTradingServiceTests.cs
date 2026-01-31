@@ -14,6 +14,31 @@ public class SimulationTradingServiceTests
     return new ApplicationDbContext(options);
   }
 
+  private static DateTime GetStartOfDayUtcInEastern(DateTime utcNow)
+  {
+    TimeZoneInfo tz;
+    try
+    {
+      tz = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+    }
+    catch (TimeZoneNotFoundException)
+    {
+      tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+    }
+
+    var easternNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz);
+    var startOfDayEastern = new DateTime(
+      easternNow.Year,
+      easternNow.Month,
+      easternNow.Day,
+      0,
+      0,
+      0,
+      DateTimeKind.Unspecified);
+
+    return TimeZoneInfo.ConvertTimeToUtc(startOfDayEastern, tz);
+  }
+
   [Fact]
   public async Task GetUserPortfoliosAsync_CreatesDefaultPortfolio_WhenNoneExist()
   {
@@ -112,6 +137,137 @@ public class SimulationTradingServiceTests
 
     var expectedRealized = 5 * (186.00m - 185.42m);
     Assert.Equal(expectedRealized, positionAfterSell.RealizedPL);
+  }
+
+  [Fact]
+  public async Task GetPortfolioSummaryAsync_ComputesTodayRealizedPL_SinceMidnightEastern()
+  {
+    using var context = CreateContext();
+    context.Users.Add(new User
+    {
+      Id = 1,
+      Name = "Test User",
+      Email = "test@example.com",
+      CreatedAt = DateTime.UtcNow
+    });
+    await context.SaveChangesAsync();
+
+    var portfolio = new SimulationPortfolio
+    {
+      UserId = 1,
+      Name = "Test",
+      InitialCash = 10_000m,
+      CurrentCash = 10_000m,
+      CreatedAt = DateTime.UtcNow
+    };
+    context.SimulationPortfolios.Add(portfolio);
+    await context.SaveChangesAsync();
+
+    var utcNow = DateTime.UtcNow;
+    var startOfDayUtc = GetStartOfDayUtcInEastern(utcNow);
+
+    context.SimulationTransactions.AddRange(
+      new SimulationTransaction
+      {
+        PortfolioId = portfolio.Id,
+        Symbol = "AAPL",
+        Type = TransactionType.Sell,
+        OrderType = OrderType.Market,
+        Quantity = 1,
+        Price = 100m,
+        Status = TransactionStatus.Executed,
+        CreatedAt = startOfDayUtc.AddMinutes(-2),
+        ExecutedAt = startOfDayUtc.AddMinutes(-1),
+        RealizedPL = -1m
+      },
+      new SimulationTransaction
+      {
+        PortfolioId = portfolio.Id,
+        Symbol = "AAPL",
+        Type = TransactionType.Sell,
+        OrderType = OrderType.Market,
+        Quantity = 1,
+        Price = 100m,
+        Status = TransactionStatus.Executed,
+        CreatedAt = startOfDayUtc.AddMinutes(1),
+        ExecutedAt = startOfDayUtc.AddMinutes(2),
+        RealizedPL = -2m
+      });
+
+    await context.SaveChangesAsync();
+
+    var service = new SimulationTradingService(context);
+    var summary = await service.GetPortfolioSummaryAsync(portfolio.Id, 1);
+
+    Assert.Equal(-2m, summary.TodayRealizedPL);
+  }
+
+  [Fact]
+  public async Task ExecuteTradeAsync_BuyThenSellAll_KeepsRealizedPLInSummary_WhenPositionCloses()
+  {
+    using var context = CreateContext();
+    context.Users.Add(new User
+    {
+      Id = 1,
+      Name = "Test User",
+      Email = "test@example.com",
+      CreatedAt = DateTime.UtcNow
+    });
+    await context.SaveChangesAsync();
+
+    var portfolio = new SimulationPortfolio
+    {
+      UserId = 1,
+      Name = "Test",
+      InitialCash = 10_000m,
+      CurrentCash = 10_000m,
+      CreatedAt = DateTime.UtcNow,
+      FeeSettingsJson = FeeSettingsSerializer.Serialize(new FeeSettings
+      {
+        Mode = FeeMode.Custom,
+        EnableCommissions = true,
+        CommissionPerShare = 0.1m,
+        MinimumCommission = 0m,
+        MaximumCommission = 999m,
+        EnableRegulatoryFees = false,
+        EnableShortFees = false
+      })
+    };
+    context.SimulationPortfolios.Add(portfolio);
+    await context.SaveChangesAsync();
+
+    var service = new SimulationTradingService(context);
+
+    await service.ExecuteTradeAsync(
+      portfolio.Id,
+      1,
+      "AAPL",
+      "NASDAQ",
+      TransactionType.Buy,
+      quantity: 10,
+      price: 100m,
+      orderType: OrderType.Market);
+
+    await service.ExecuteTradeAsync(
+      portfolio.Id,
+      1,
+      "AAPL",
+      "NASDAQ",
+      TransactionType.Sell,
+      quantity: 10,
+      price: 100m,
+      orderType: OrderType.Market);
+
+    var afterSell = await context.SimulationPortfolios
+      .Include(p => p.Positions)
+      .SingleAsync(p => p.Id == portfolio.Id);
+
+    Assert.Empty(afterSell.Positions);
+
+    var summary = await service.GetPortfolioSummaryAsync(portfolio.Id, 1);
+
+    Assert.Equal(10_000m - 2m, summary.TotalValue);
+    Assert.Equal(-2m, summary.TotalPL);
   }
 
   [Fact]

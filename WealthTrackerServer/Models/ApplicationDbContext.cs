@@ -24,6 +24,7 @@ public class ApplicationDbContext : DbContext
     {
       entity.Property(p => p.InitialCash).HasPrecision(18, 2);
       entity.Property(p => p.CurrentCash).HasPrecision(18, 2);
+      entity.Property(p => p.RealizedPL).HasPrecision(18, 4);
       entity.Property(p => p.FeeSettingsJson).HasColumnType("jsonb");
 
       entity.HasOne(p => p.User)
@@ -52,6 +53,7 @@ public class ApplicationDbContext : DbContext
     modelBuilder.Entity<SimulationTransaction>(entity =>
     {
       entity.Property(t => t.Price).HasPrecision(18, 4);
+      entity.Property(t => t.RealizedPL).HasPrecision(18, 4);
       entity.Property(t => t.Fee).HasPrecision(18, 4);
       entity.Property(t => t.Commission).HasPrecision(18, 4);
       entity.Property(t => t.TAFFee).HasPrecision(18, 6);

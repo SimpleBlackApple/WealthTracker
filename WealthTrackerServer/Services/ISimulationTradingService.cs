@@ -45,6 +45,7 @@ public class PortfolioSummary
   public decimal EquityValue { get; set; }
   public decimal TotalPL { get; set; }
   public decimal TotalPLPercentage { get; set; }
+  public decimal TodayRealizedPL { get; set; }
   public List<PositionWithPL> Positions { get; set; } = new();
 }
 
@@ -64,4 +65,3 @@ public class PositionWithPL
   public decimal RealizedPL { get; set; }
   public decimal BorrowCost { get; set; }
 }
-

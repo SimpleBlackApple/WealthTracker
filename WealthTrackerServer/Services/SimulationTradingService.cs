@@ -7,6 +7,7 @@ public class SimulationTradingService : ISimulationTradingService
 {
   private readonly ApplicationDbContext _context;
   private readonly SimulationFeeCalculator _feeCalculator;
+  private static readonly TimeZoneInfo EasternTimeZone = GetEasternTimeZone();
 
   public SimulationTradingService(ApplicationDbContext context)
   {
@@ -30,6 +31,7 @@ public class SimulationTradingService : ISimulationTradingService
       Name = name.Trim(),
       InitialCash = initialCash,
       CurrentCash = initialCash,
+      RealizedPL = 0m,
       CreatedAt = DateTime.UtcNow,
       FeeSettingsJson = FeeSettingsSerializer.Serialize(new FeeSettings())
     };
@@ -64,6 +66,7 @@ public class SimulationTradingService : ISimulationTradingService
       Name = "My First Portfolio",
       InitialCash = 100_000m,
       CurrentCash = 100_000m,
+      RealizedPL = 0m,
       CreatedAt = DateTime.UtcNow,
       FeeSettingsJson = FeeSettingsSerializer.Serialize(new FeeSettings())
     };
@@ -186,6 +189,7 @@ public class SimulationTradingService : ISimulationTradingService
       OrderType = orderType,
       Quantity = quantity,
       Price = price,
+      RealizedPL = 0m,
       Commission = fees.Commission,
       TAFFee = fees.TAFFee,
       SECFee = fees.SECFee,
@@ -282,13 +286,22 @@ public class SimulationTradingService : ISimulationTradingService
       Cash = portfolio.CurrentCash
     };
 
+    var utcNow = DateTime.UtcNow;
+    var startOfDayUtc = GetStartOfDayUtcInEastern(utcNow);
+
+    summary.TodayRealizedPL = await _context.SimulationTransactions
+      .Where(t => t.PortfolioId == portfolioId &&
+        t.Status == TransactionStatus.Executed &&
+        t.ExecutedAt != null &&
+        t.ExecutedAt >= startOfDayUtc)
+      .SumAsync(t => (decimal?)t.RealizedPL) ?? 0m;
+
     var positions = portfolio.Positions
       .OrderByDescending(p => p.UpdatedAt)
       .ThenBy(p => p.Symbol)
       .ToList();
 
     decimal equityValue = 0m;
-    decimal totalRealized = 0m;
     decimal totalUnrealized = 0m;
 
     foreach (var position in positions)
@@ -311,7 +324,6 @@ public class SimulationTradingService : ISimulationTradingService
       }
 
       if (positionValue != null) equityValue += positionValue.Value;
-      totalRealized += position.RealizedPL;
       totalUnrealized += unrealized ?? 0m;
 
       summary.Positions.Add(new PositionWithPL
@@ -334,11 +346,40 @@ public class SimulationTradingService : ISimulationTradingService
 
     summary.EquityValue = equityValue;
     summary.TotalValue = summary.Cash + summary.EquityValue;
-    summary.TotalPL = totalRealized + totalUnrealized;
+    summary.TotalPL = portfolio.RealizedPL + totalUnrealized;
     summary.TotalPLPercentage =
       portfolio.InitialCash == 0m ? 0m : summary.TotalPL / portfolio.InitialCash;
 
     return summary;
+  }
+
+  private static TimeZoneInfo GetEasternTimeZone()
+  {
+    try
+    {
+      // Windows
+      return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+    }
+    catch (TimeZoneNotFoundException)
+    {
+      // Linux / containers
+      return TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+    }
+  }
+
+  private static DateTime GetStartOfDayUtcInEastern(DateTime utcNow)
+  {
+    var easternNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, EasternTimeZone);
+    var startOfDayEastern = new DateTime(
+      easternNow.Year,
+      easternNow.Month,
+      easternNow.Day,
+      0,
+      0,
+      0,
+      DateTimeKind.Unspecified);
+
+    return TimeZoneInfo.ConvertTimeToUtc(startOfDayEastern, EasternTimeZone);
   }
 
   private static void AccrueBorrowCosts(SimulationPortfolio portfolio, DateTime now)
@@ -365,6 +406,7 @@ public class SimulationTradingService : ISimulationTradingService
       portfolio.CurrentCash -= cost;
       position.BorrowCost = (position.BorrowCost ?? 0m) + cost;
       position.RealizedPL -= cost;
+      portfolio.RealizedPL -= cost;
       position.UpdatedAt = now;
     }
   }
@@ -437,7 +479,7 @@ public class SimulationTradingService : ISimulationTradingService
               Symbol = transaction.Symbol,
               Exchange = transaction.Exchange,
               Quantity = transaction.Quantity,
-              AverageCost = transaction.Price,
+              AverageCost = cost / transaction.Quantity,
               CurrentPrice = transaction.Price,
               LastPriceUpdate = now,
               RealizedPL = 0m,
@@ -451,9 +493,9 @@ public class SimulationTradingService : ISimulationTradingService
           else
           {
             var totalQty = longPosition.Quantity + transaction.Quantity;
-            var newAvg = ((longPosition.AverageCost * longPosition.Quantity) +
-                (transaction.Price * transaction.Quantity)) /
-              totalQty;
+            var existingTotalCost = longPosition.AverageCost * longPosition.Quantity;
+            var addedTotalCost = cost;
+            var newAvg = (existingTotalCost + addedTotalCost) / totalQty;
 
             longPosition.Quantity = totalQty;
             longPosition.AverageCost = newAvg;
@@ -475,7 +517,9 @@ public class SimulationTradingService : ISimulationTradingService
 
           var realized = (transaction.Price - longPosition.AverageCost) *
             transaction.Quantity - totalFees;
+          transaction.RealizedPL = realized;
           longPosition.RealizedPL += realized;
+          portfolio.RealizedPL += realized;
           longPosition.Quantity -= transaction.Quantity;
           longPosition.CurrentPrice = transaction.Price;
           longPosition.LastPriceUpdate = now;
@@ -508,7 +552,7 @@ public class SimulationTradingService : ISimulationTradingService
               Symbol = transaction.Symbol,
               Exchange = transaction.Exchange,
               Quantity = transaction.Quantity,
-              AverageCost = transaction.Price,
+              AverageCost = proceeds / transaction.Quantity,
               CurrentPrice = transaction.Price,
               LastPriceUpdate = now,
               RealizedPL = 0m,
@@ -522,9 +566,9 @@ public class SimulationTradingService : ISimulationTradingService
           else
           {
             var totalQty = shortPosition.Quantity + transaction.Quantity;
-            var newAvg = ((shortPosition.AverageCost * shortPosition.Quantity) +
-                (transaction.Price * transaction.Quantity)) /
-              totalQty;
+            var existingTotalCredit = shortPosition.AverageCost * shortPosition.Quantity;
+            var addedTotalCredit = proceeds;
+            var newAvg = (existingTotalCredit + addedTotalCredit) / totalQty;
 
             shortPosition.Quantity = totalQty;
             shortPosition.AverageCost = newAvg;
@@ -549,7 +593,9 @@ public class SimulationTradingService : ISimulationTradingService
 
           var realized = (shortPosition.AverageCost - transaction.Price) *
             transaction.Quantity - totalFees;
+          transaction.RealizedPL = realized;
           shortPosition.RealizedPL += realized;
+          portfolio.RealizedPL += realized;
           shortPosition.Quantity -= transaction.Quantity;
           shortPosition.CurrentPrice = transaction.Price;
           shortPosition.LastPriceUpdate = now;
