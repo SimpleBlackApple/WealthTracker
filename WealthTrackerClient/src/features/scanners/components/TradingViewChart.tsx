@@ -179,7 +179,7 @@ function TradingViewChartComponent({
       script.innerHTML = JSON.stringify({
         autosize: true,
         symbol: tvSymbol,
-        interval: 'D',
+        interval: '5',
         timezone: 'Etc/UTC',
         theme: isDark ? 'dark' : 'light',
         style: '1',

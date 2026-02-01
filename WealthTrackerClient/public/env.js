@@ -4,5 +4,5 @@ window.__WEALTHTRACKER_CONFIG__ = {
   apiBaseUrl: '',
   googleClientId: '',
   googleRedirectUri: '',
+  scannerRefreshSeconds: 300,
 }
-

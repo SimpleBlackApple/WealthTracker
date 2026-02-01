@@ -8,7 +8,7 @@ cat > "${WEB_ROOT}/env.js" <<EOF
 window.__WEALTHTRACKER_CONFIG__ = {
   apiBaseUrl: "${API_BASE_URL:-}",
   googleClientId: "${GOOGLE_CLIENT_ID:-}",
-  googleRedirectUri: "${GOOGLE_REDIRECT_URI:-}"
+  googleRedirectUri: "${GOOGLE_REDIRECT_URI:-}",
+  scannerRefreshSeconds: ${SCANNER_REFRESH_SECONDS:-300}
 }
 EOF
-

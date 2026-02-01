@@ -7,6 +7,9 @@ public class DayGainersResponse
     [JsonPropertyName("scanner")]
     public string Scanner { get; set; } = "day_gainers";
 
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset? AsOf { get; set; }
+
     [JsonPropertyName("sorted_by")]
     public string SortedBy { get; set; } = string.Empty;
 
@@ -19,6 +22,9 @@ public class HodVwapMomentumResponse
     [JsonPropertyName("scanner")]
     public string Scanner { get; set; } = "hod_vwap_momentum";
 
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset? AsOf { get; set; }
+
     [JsonPropertyName("sorted_by")]
     public string SortedBy { get; set; } = string.Empty;
 
@@ -30,6 +36,9 @@ public class HodVwapApproachResponse
 {
     [JsonPropertyName("scanner")]
     public string Scanner { get; set; } = "hod_vwap_approach";
+
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset? AsOf { get; set; }
 
     [JsonPropertyName("sorted_by")]
     public string SortedBy { get; set; } = string.Empty;

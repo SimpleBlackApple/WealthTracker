@@ -128,6 +128,7 @@ export type HodVwapApproachRow = {
 
 export type ScannerResponse<TRow> = {
   scanner: string
+  asOf?: string
   sorted_by: string
   results: TRow[]
 }

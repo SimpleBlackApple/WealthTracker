@@ -67,6 +67,7 @@ services:
       API_BASE_URL: "${API_BASE_URL:-http://localhost:${API_HOST_PORT:-5141}/api}"
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
       GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-http://localhost:${WEB_HOST_PORT:-5173}/auth/callback}"
+      SCANNER_REFRESH_SECONDS: "${CACHE_TTL_SECONDS:-300}"
     ports:
       - "${WEB_HOST_PORT:-5173}:${WEB_CONTAINER_PORT:-8080}"
     depends_on:
@@ -74,4 +75,3 @@ services:
 
 volumes:
   postgres-data:
-

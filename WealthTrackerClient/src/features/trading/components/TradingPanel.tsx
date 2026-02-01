@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { getRuntimeConfig } from '@/config/runtimeConfig'
 
 import { useTradingContext } from '../contexts/TradingContext'
 import { usePortfolios } from '../hooks/usePortfolios'
@@ -30,6 +31,10 @@ export function TradingPanel({
   currentPrice,
   priceTimestamp,
 }: TradingPanelProps) {
+  const refreshMinutes = Math.max(
+    1,
+    Math.round(getRuntimeConfig().scannerRefreshSeconds / 60)
+  )
   const { activePortfolioId } = useTradingContext()
   const portfoliosQuery = usePortfolios()
   const portfolios = portfoliosQuery.data ?? []
@@ -77,8 +82,13 @@ export function TradingPanel({
             </div>
           </div>
 
-          <div className="text-xs text-muted-foreground tabular-nums">
-            {formatUpdatedAgo(priceTimestamp, now)}
+          <div className="text-right">
+            <div className="text-[10px] text-muted-foreground/80">
+              Paper trading ({refreshMinutes}m refresh)
+            </div>
+            <div className="text-xs text-muted-foreground tabular-nums">
+              {formatUpdatedAgo(priceTimestamp, now)}
+            </div>
           </div>
         </div>
 

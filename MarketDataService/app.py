@@ -348,7 +348,35 @@ def _download_intraday(
         return {}
 
     frames: dict[str, pd.DataFrame] = {}
-    for batch in _chunk(tickers, 50):
+    missing: List[str] = []
+    for ticker in tickers:
+        cache_key = f"md:barsdf:{ticker}:{interval}:{period}:prepost={1 if prepost else 0}"
+        cached = None
+        try:
+            raw = redis_client.get(cache_key)
+        except redis.RedisError:
+            raw = None
+        if raw:
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                columns = payload.get("columns")
+                data = payload.get("data")
+                index = payload.get("index")
+                if isinstance(columns, list) and isinstance(data, list) and isinstance(index, list):
+                    try:
+                        cached = pd.DataFrame(data, columns=columns)
+                        cached.index = pd.to_datetime(index)
+                    except Exception:
+                        cached = None
+        if cached is not None and not getattr(cached, "empty", True):
+            frames[ticker] = cached
+        else:
+            missing.append(ticker)
+
+    for batch in _chunk(missing, 50):
         try:
             data = yf.download(
                 tickers=" ".join(batch),
@@ -372,11 +400,33 @@ def _download_intraday(
                     df = data[ticker].dropna(how="all")
                     if not df.empty:
                         frames[ticker] = df
+                        cache_key = f"md:barsdf:{ticker}:{interval}:{period}:prepost={1 if prepost else 0}"
+                        if isinstance(df.index, pd.DatetimeIndex):
+                            try:
+                                payload = {
+                                    "columns": list(df.columns),
+                                    "index": [ts.isoformat() for ts in df.index],
+                                    "data": df.values.tolist(),
+                                }
+                                redis_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(payload))
+                            except redis.RedisError:
+                                pass
         else:
             ticker = batch[0]
             df = data.dropna(how="all")
             if not df.empty:
                 frames[ticker] = df
+                cache_key = f"md:barsdf:{ticker}:{interval}:{period}:prepost={1 if prepost else 0}"
+                if isinstance(df.index, pd.DatetimeIndex):
+                    try:
+                        payload = {
+                            "columns": list(df.columns),
+                            "index": [ts.isoformat() for ts in df.index],
+                            "data": df.values.tolist(),
+                        }
+                        redis_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(payload))
+                    except redis.RedisError:
+                        pass
 
     return frames
 
@@ -810,18 +860,21 @@ class HodVwapApproachRow(BaseModel):
 
 class DayGainersResponse(BaseModel):
     scanner: str
+    asOf: Optional[str] = None
     sorted_by: str
     results: List[DayGainerRow]
 
 
 class HodVwapMomentumResponse(BaseModel):
     scanner: str
+    asOf: Optional[str] = None
     sorted_by: str
     results: List[IntradayMomentumRow]
 
 
 class HodVwapApproachResponse(BaseModel):
     scanner: str
+    asOf: Optional[str] = None
     sorted_by: str
     results: List[HodVwapApproachRow]
 
@@ -1214,6 +1267,7 @@ def scan_day_gainers(request: DayGainersRequest) -> dict:
     )
     payload = {
         "scanner": "day_gainers",
+        "asOf": feature_payload.get("asOf") or utc_now_iso(),
         "sorted_by": "change_pct desc, relative_volume desc, volume desc",
         "results": results[:SCANNER_RESULTS_LIMIT],
     }
@@ -1345,6 +1399,7 @@ def scan_hod_vwap_momentum(request: HodVwapMomentumRequest) -> dict:
     )
     payload = {
         "scanner": "hod_vwap_momentum",
+        "asOf": feature_payload.get("asOf") or utc_now_iso(),
         "sorted_by": "break_type desc, price_change_pct desc, relative_volume desc",
         "results": results[:SCANNER_RESULTS_LIMIT],
     }
@@ -1497,6 +1552,7 @@ def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
     )
     payload = {
         "scanner": "volume_spikes",
+        "asOf": feature_payload.get("asOf") or utc_now_iso(),
         "sorted_by": "relative_volume desc, price_change_pct desc",
         "results": results[:SCANNER_RESULTS_LIMIT],
     }
@@ -1613,6 +1669,7 @@ def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
     )
     payload = {
         "scanner": "hod_vwap_approach",
+        "asOf": feature_payload.get("asOf") or utc_now_iso(),
         "sorted_by": "distance_to_hod asc, abs(vwap_distance) asc, relative_volume desc",
         "results": results[:SCANNER_RESULTS_LIMIT],
     }

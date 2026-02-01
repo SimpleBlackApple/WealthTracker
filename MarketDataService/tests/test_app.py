@@ -102,6 +102,7 @@ class TestScannerWrappers(unittest.TestCase):
     def test_scan_hod_breakouts_adjusts_payload(self):
         payload = {
             "scanner": "hod_vwap_momentum",
+            "asOf": "2024-01-02T15:00:00Z",
             "sorted_by": "placeholder",
             "results": [
                 {
@@ -124,6 +125,7 @@ class TestScannerWrappers(unittest.TestCase):
         self.assertEqual(
             result["sorted_by"], "price_change_pct desc, relative_volume desc"
         )
+        self.assertEqual(result["asOf"], "2024-01-02T15:00:00Z")
         row = result["results"][0]
         self.assertIsNone(row["vwap"])
         self.assertIsNone(row["vwap_distance"])

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -44,6 +44,7 @@ import { TableSkeleton } from '@/features/scanners/components/TableSkeleton'
 import { TradingViewChart } from '@/features/scanners/components/TradingViewChart'
 import { TradingPanel } from '@/features/trading/components/TradingPanel'
 import { scannerService } from '@/features/scanners/services/scannerService'
+import { getRuntimeConfig } from '@/config/runtimeConfig'
 import {
   SCANNERS,
   type ScannerId,
@@ -54,6 +55,31 @@ import {
 
 type SortState = { key: string; direction: SortDirection }
 type Scanner = ScannerDefinition<ScannerId>
+
+const SCANNER_REFRESH_MS = Math.max(
+  1,
+  Math.trunc(getRuntimeConfig().scannerRefreshSeconds * 1000)
+)
+
+function useIsDocumentVisible() {
+  const [isVisible, setIsVisible] = useState(() => {
+    if (typeof document === 'undefined') return true
+    return document.visibilityState !== 'hidden'
+  })
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      setIsVisible(document.visibilityState !== 'hidden')
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [])
+
+  return isVisible
+}
 
 function formatNumber(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) return '-'
@@ -184,6 +210,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     ScannerRequestById[ScannerId]
   >(definition.defaultRequest)
 
+  const isDocumentVisible = useIsDocumentVisible()
+
   const [sort, setSort] = useState<SortState>(definition.defaultSort)
   const [pageIndex, setPageIndex] = useState(0)
   const [symbolFilter, setSymbolFilter] = useState('')
@@ -200,9 +228,47 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
         definition.id,
         appliedRequest as ScannerRequestById[typeof definition.id]
       ),
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
+    staleTime: SCANNER_REFRESH_MS,
+    refetchOnWindowFocus: true,
   })
+
+  const asOfMs = useMemo(() => {
+    const raw = query.data?.asOf
+    if (typeof raw !== 'string') return null
+    const parsed = Date.parse(raw)
+    return Number.isFinite(parsed) ? parsed : null
+  }, [query.data?.asOf])
+
+  useEffect(() => {
+    if (!isDocumentVisible) return
+    if (query.isFetching) return
+
+    const baseMs = asOfMs ?? (query.dataUpdatedAt > 0 ? query.dataUpdatedAt : 0)
+    if (!baseMs) return
+
+    const expiresAt = baseMs + SCANNER_REFRESH_MS
+    const delayMs = expiresAt - Date.now()
+
+    if (!Number.isFinite(delayMs)) return
+    if (delayMs <= 0) {
+      query.refetch()
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (document.visibilityState !== 'hidden') {
+        query.refetch()
+      }
+    }, delayMs + 100)
+
+    return () => window.clearTimeout(timeout)
+  }, [
+    asOfMs,
+    isDocumentVisible,
+    query.dataUpdatedAt,
+    query.isFetching,
+    query.refetch,
+  ])
 
   const rows = useMemo(
     () => (query.data?.results ?? []) as Record<string, unknown>[],
@@ -478,10 +544,15 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   <div className="flex items-center gap-2">
                     <div className="mr-2 flex items-center gap-2 border-r border-border/70 pr-4 text-xs text-muted-foreground">
                       <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
-                      {query.dataUpdatedAt > 0 && (
+                      {(asOfMs !== null || query.dataUpdatedAt > 0) && (
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {new Date(query.dataUpdatedAt).toLocaleTimeString()}
+                          <span>
+                            As of{' '}
+                            {new Date(
+                              asOfMs ?? query.dataUpdatedAt
+                            ).toLocaleTimeString()}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -1072,7 +1143,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         currentPrice={getCurrentPriceFromScanner(
                           effectiveSelectedSymbol.symbol
                         )}
-                        priceTimestamp={query.dataUpdatedAt}
+                        priceTimestamp={asOfMs ?? query.dataUpdatedAt}
                       />
                     </div>
                   </div>
