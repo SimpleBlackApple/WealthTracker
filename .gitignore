@@ -14,6 +14,10 @@ __pycache__/
 *.pyc
 .venv/
 
+# Documents
+docs/*Plan.md
+docs/*zh.md
+
 # Agent
 .claude
 .cache
@@ -22,8 +26,6 @@ openspec
 AGENTS.md
 CLAUDE.md
 *Plan.md
-!docs/ScannerPlan.md
-!docs/ScannerImrovePlan.md
 findings.md
 progress.md
 task_plan.md

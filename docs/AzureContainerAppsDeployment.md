@@ -1,209 +1,566 @@
-# Deploy to Azure Container Apps (Guide)
+# Deploy to Azure Container Apps - Cost-Optimized Guide (v2)
 
-Azure Container Apps doesn't take `docker-compose.yml` directly, so the local `docker-compose.local.yml` is only for local testing. For Azure you deploy each container image to its own Container App.
+This guide shows you how to deploy WealthTracker to **Azure Container Apps** using a **cost-optimized architecture** with managed database services.
 
-## Target architecture (recommended)
+## Why This Architecture?
 
-- **web**: `WealthTrackerClient` (external ingress)
-- **api**: `WealthTrackerServer` (external ingress)
-- **market-data**: `MarketDataService` (internal ingress)
-- **redis**: Azure Cache for Redis (managed service)
-- **postgres**: Azure Database for PostgreSQL Flexible Server (managed service)
+The original approach used Azure's managed services (Redis and PostgreSQL), which cost **$30-50+/month** minimum. This new design uses **free tiers** from third-party providers while keeping your applications on Azure Container Apps.
+
+**Total monthly cost: $0-5** (compared to $50-100 with full Azure managed services)
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Azure Container Apps                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │     web     │  │     api     │  │    market-data      │  │
+│  │  (public)   │  │  (public)   │  │    (internal)       │  │
+│  │   Port 8080 │  │   Port 5141 │  │     Port 8001       │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+│         ↑                ↑                    ↑             │
+│         └────────────────┴────────────────────┘             │
+│              All services can scale to zero                  │
+└─────────────────────────────────────────────────────────────┘
+         ↓                           ↓
+┌─────────────────┐        ┌─────────────────┐
+│   Upstash Redis │        │ Supabase Postgres│
+│    (Free Tier)  │        │    (Free Tier)   │
+│   256MB / 500K  │        │   500MB storage  │
+│   commands/month│        │   200MB egress   │
+└─────────────────┘        └─────────────────┘
+```
+
+### Components
+
+| Service | Provider | Cost | Why |
+|---------|----------|------|-----|
+| **web** (React frontend) | Azure Container Apps | $0-2/month | Scales to zero, uses free tier |
+| **api** (.NET backend) | Azure Container Apps | $0-2/month | Scales to zero, uses free tier |
+| **market-data** (Python) | Azure Container Apps | $0-1/month | Internal only, minimal resources |
+| **PostgreSQL** | Supabase | **$0** | 500MB storage, suitable for development and testing |
+| **Redis** | Upstash | **$0** | 256MB, 500K commands/month, 5min TTL |
 
 ## Prerequisites
 
-- Azure CLI (`az`) and an Azure subscription.
-- Docker Desktop (optional if you use `az acr build`).
+- **Azure CLI** (`az`) installed - [Install guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+- **Azure subscription** with valid payment method (though you'll stay in free tiers)
+- **Supabase account** (free) - [Sign up](https://supabase.com)
+- **Upstash account** (free) - [Sign up](https://upstash.com)
+- **Google OAuth credentials** (for authentication)
 
-References:
+## Step 1: Set Up Free Database Services
 
-- Azure Container Apps tutorial (code to cloud): https://learn.microsoft.com/en-us/azure/container-apps/tutorial-code-to-cloud
-- Configure ingress (overview): https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview
-- Configure ingress (how-to / target port): https://learn.microsoft.com/en-us/azure/container-apps/ingress-how-to
-- Environment variables: https://learn.microsoft.com/en-us/azure/container-apps/environment-variables
-- Secrets (incl. Key Vault references): https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets
-- App-to-app communication (internal DNS): https://learn.microsoft.com/en-us/azure/container-apps/connect-apps
-- ACR build task quickstart (`az acr build`): https://learn.microsoft.com/en-us/azure/container-registry/container-registry-quickstart-task-cli
-- PostgreSQL Flexible Server quickstart: https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/quickstart-create-server
-- PostgreSQL Flexible Server connection string format: https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/quickstart-create-server#connection-string-format
-- Private ACR image pull with managed identity: https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull
+### 1.1 Create Supabase Project (PostgreSQL)
 
-## 1) Create Azure resources
+1. Go to [supabase.com](https://supabase.com) and create a free account
+2. Click "New Project"
+3. Choose organization and project name (e.g., "wealthtracker")
+4. Set database password (save this!)
+5. Choose region (pick same region as Azure: `East US` recommended)
+6. Wait for database to be ready (~2 minutes)
 
-Run in PowerShell (or Azure Cloud Shell):
+**Get your connection string:**
+
+1. In Supabase dashboard, go to **Settings** → **Database**
+2. Find "Connection string" section
+3. Copy the connection details and format as Npgsql connection string:
+   ```
+   Host=db.xxxxxxxx.supabase.co;Port=5432;Database=WealthTracker;Username=postgres;Password=[PASSWORD];SSL Mode=Require;Trust Server Certificate=true
+   ```
+4. **Important**: Keep this secure! You'll need it in Step 4.
+
+**Create the database:**
+
+```sql
+-- In Supabase SQL Editor, run:
+CREATE DATABASE "WealthTracker";
+```
+
+### 1.2 Create Upstash Redis Database
+
+1. Go to [upstash.com](https://upstash.com) and create free account
+2. Click "Create Database"
+3. Name: `wealthtracker-redis`
+4. Region: Select same as Azure (e.g., `us-east-1` for Virginia)
+5. Type: **Redis**
+6. Click "Create"
+
+**Get your Redis URL:**
+
+1. In Upstash console, click your database
+2. Find "redis-cli" section
+3. Copy the **UPSTASH_REDIS_REST_URL** or use the Redis protocol URL
+4. The format should be:
+   ```
+   rediss://default:xxxxxxxx@xxxxxxxx.upstash.io:6379
+   ```
+   - Note: It's `rediss://` (with 's' for SSL/TLS)
+   - Upstash uses port 6379 and requires SSL
+
+**Test the connection locally:**
+
+```bash
+# Install redis-cli if needed
+# Test connection (replace with your actual URL)
+redis-cli -u "rediss://default:YOUR_PASSWORD@YOUR_HOST.upstash.io:6379" ping
+# Should return: PONG
+```
+
+## Step 2: Create Azure Resources
+
+Open PowerShell or Azure Cloud Shell and run:
 
 ```powershell
+# Set variables
 $RG="wealthtracker-rg"
 $LOC="eastus"
 $ACR_NAME="wealthtrackeracr$((Get-Random -Maximum 9999))"
 $ENV_NAME="wealthtracker-env"
 
+# Login to Azure
 az login
+
+# Create resource group
 az group create -n $RG -l $LOC
 
-# ACR (container registry)
+# Create Container Registry (for storing Docker images)
 az acr create -g $RG -n $ACR_NAME --sku Basic
-```
 
-Create a Container Apps environment:
-
-```powershell
+# Create Container Apps Environment
 az containerapp env create `
   -g $RG `
   -n $ENV_NAME `
   -l $LOC
 ```
 
-## 2) Build and push container images
+**What this creates:**
+- Resource group: Logical container for all resources
+- Azure Container Registry (ACR): Stores your Docker images privately
+- Container Apps Environment: The Kubernetes-like platform that runs your containers
 
-Option A (recommended): build in Azure with ACR Tasks (no local Docker needed):
+## Step 3: Build and Push Container Images
 
-```powershell
-# From repo root
-az acr build -g $RG -r $ACR_NAME -t wealthtracker-api:1 -f WealthTrackerServer/Dockerfile .
-az acr build -g $RG -r $ACR_NAME -t wealthtracker-web:1 -f WealthTrackerClient/Dockerfile WealthTrackerClient
-az acr build -g $RG -r $ACR_NAME -t wealthtracker-market-data:1 -f MarketDataService/Dockerfile MarketDataService
-```
-
-Option B: build locally + push:
+Build all three application containers in Azure (no local Docker needed):
 
 ```powershell
-az acr login -n $ACR_NAME
+# Build API (.NET backend)
+az acr build `
+  -g $RG `
+  -r $ACR_NAME `
+  -t wealthtracker-api:1 `
+  -f WealthTrackerServer/Dockerfile .
 
-docker build -t "$ACR_NAME.azurecr.io/wealthtracker-api:1" -f WealthTrackerServer/Dockerfile .
-docker push "$ACR_NAME.azurecr.io/wealthtracker-api:1"
+# Build Web (React frontend)
+az acr build `
+  -g $RG `
+  -r $ACR_NAME `
+  -t wealthtracker-web:1 `
+  -f WealthTrackerClient/Dockerfile `
+  WealthTrackerClient
 
-docker build -t "$ACR_NAME.azurecr.io/wealthtracker-web:1" -f WealthTrackerClient/Dockerfile WealthTrackerClient
-docker push "$ACR_NAME.azurecr.io/wealthtracker-web:1"
-
-docker build -t "$ACR_NAME.azurecr.io/wealthtracker-market-data:1" -f MarketDataService/Dockerfile MarketDataService
-docker push "$ACR_NAME.azurecr.io/wealthtracker-market-data:1"
+# Build Market Data (Python service)
+az acr build `
+  -g $RG `
+  -r $ACR_NAME `
+  -t wealthtracker-market-data:1 `
+  -f MarketDataService/Dockerfile `
+  MarketDataService
 ```
 
-## 3) Provision managed Redis + Postgres
+**What this does:**
+- Uploads your source code to Azure
+- Azure builds Docker images in the cloud
+- Stores images in your private registry
+- Takes ~3-5 minutes per image
 
-This repo uses Postgres and Redis in local Docker. In Azure, prefer managed services:
+**Verify builds:**
 
-- Create **Azure Cache for Redis** and copy the connection string/host+port.
-- Create **Azure Database for PostgreSQL Flexible Server** and a database (for example `WealthTracker`), then copy the ADO.NET connection string or construct it.
+```powershell
+az acr repository list -n $ACR_NAME -o table
+# Should show: wealthtracker-api, wealthtracker-market-data, wealthtracker-web
+```
 
-Notes:
+## Deployment Strategy
 
-- For Postgres, you typically want `Ssl Mode=Require` in production.
-- Network access rules (public access vs VNet) depend on your security posture.
+All services use **single tag deployment** (`:1`) with `--replace` flag:
+- **First deploy**: Creates new Container App
+- **Subsequent deploys**: Updates image and replaces current revision (old revisions are removed)
+- **Benefits**: No accumulation of old revisions or image tags, keeping costs minimal
 
-## 4) Deploy `market-data` container app (internal)
+## Step 4: Deploy Market Data Service (Internal)
 
-This service should be internal-only (no public ingress). Other apps in the same Container Apps environment can call it using `http://<APP_NAME>` (service discovery).
+This service runs internally (no public access) and connects to Upstash Redis.
 
 ```powershell
 $MARKETDATA_APP="wealthtracker-market-data"
+$UPSTASH_REDIS_URL="rediss://default:YOUR_PASSWORD@YOUR_HOST.upstash.io:6379"
 
-az containerapp create `
-  -g $RG `
-  -n $MARKETDATA_APP `
-  --environment $ENV_NAME `
-  --image "$ACR_NAME.azurecr.io/wealthtracker-market-data:1" `
-  --ingress internal `
-  --target-port 8001 `
-  --registry-server "$ACR_NAME.azurecr.io" `
-  --env-vars `
-    "PORT=8001" `
-    "REDIS_URL=<YOUR_AZURE_REDIS_URL>" `
-    "CACHE_TTL_SECONDS=300"
+# Check if app exists
+$appExists = az containerapp show -g $RG -n $MARKETDATA_APP 2>&1
+
+if ($appExists -match "ResourceNotFound") {
+    # Create new app
+    Write-Host "Creating new market-data app..."
+    az containerapp create `
+      -g $RG `
+      -n $MARKETDATA_APP `
+      --environment $ENV_NAME `
+      --image "$ACR_NAME.azurecr.io/wealthtracker-market-data:1" `
+      --ingress internal `
+      --target-port 8001 `
+      --registry-server "$ACR_NAME.azurecr.io" `
+      --env-vars `
+        "PORT=8001" `
+        "REDIS_URL=$UPSTASH_REDIS_URL" `
+        "CACHE_TTL_SECONDS=300" `
+        "SCANNER_UNIVERSE_LIMIT=25" `
+        "SCANNER_RESULTS_LIMIT=25"
+} else {
+    # Update existing app with --replace (no old revisions kept)
+    Write-Host "Updating existing market-data app..."
+    az containerapp update `
+      -g $RG `
+      -n $MARKETDATA_APP `
+      --image "$ACR_NAME.azurecr.io/wealthtracker-market-data:1" `
+      --replace  # Replace current revision, don't keep old ones
+}
 ```
 
-## 5) Deploy `api` container app (external)
+**Important notes:**
+- Replace `YOUR_PASSWORD` and `YOUR_HOST` with your actual Upstash credentials
+- `--ingress internal` means only other Container Apps can access this
+- The service discovers others via internal DNS: `http://wealthtracker-market-data`
+- `--replace` ensures old revisions are removed, keeping costs minimal
 
-Important env vars for this repo:
+## Step 5: Deploy API Backend (Public)
 
-- `ConnectionStrings__DefaultConnection`
-- `MarketDataService__BaseUrl` (use internal service discovery, for example `http://wealthtracker-market-data`)
-- `FrontendUrl` (for CORS)
-- Google OAuth: `Authentication__Google__ClientId`, `Authentication__Google__ClientSecret`, `Authentication__Google__RedirectUri`
-- JWT: `Authentication__Jwt__*`
-
-For secrets (Google client secret, JWT private key), use Container Apps secrets + `secretref:` in env vars.
-
-Create the API app (edit placeholders):
+The API needs PostgreSQL connection and talks to market-data internally.
 
 ```powershell
 $API_APP="wealthtracker-api"
+$SUPABASE_URL="Host=db.xxxxxxxx.supabase.co;Port=5432;Database=WealthTracker;Username=postgres;Password=YOUR_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
+$GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID"
+$GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_SECRET"
 
-az containerapp create `
+# First, store secrets securely
+az containerapp secret set `
   -g $RG `
   -n $API_APP `
-  --environment $ENV_NAME `
-  --image "$ACR_NAME.azurecr.io/wealthtracker-api:1" `
-  --ingress external `
-  --target-port 5141 `
-  --registry-server "$ACR_NAME.azurecr.io" `
   --secrets `
-    "google-client-secret=<VALUE>" `
-    "jwt-private-pem=<VALUE>" `
-    "jwt-public-pem=<VALUE>" `
-  --env-vars `
-    "PORT=5141" `
-    "MIGRATE_ON_STARTUP=1" `
-    "FrontendUrl=https://<YOUR_WEB_FQDN>" `
-    "MarketDataService__BaseUrl=http://$MARKETDATA_APP" `
-    "ConnectionStrings__DefaultConnection=<YOUR_POSTGRES_CONN_STRING>" `
-    "Authentication__Google__ClientId=<VALUE>" `
-    "Authentication__Google__ClientSecret=secretref:google-client-secret" `
-    "Authentication__Google__RedirectUri=https://<YOUR_WEB_FQDN>/auth/callback" `
-    "Authentication__Jwt__Issuer=WealthTracker" `
-    "Authentication__Jwt__Audience=WealthTrackerApi" `
-    "Authentication__Jwt__AccessTokenExpirationMinutes=60" `
-    "Authentication__Jwt__RefreshTokenExpirationDays=7" `
-    "Authentication__Jwt__RsaPrivateKeyPem=secretref:jwt-private-pem" `
-    "Authentication__Jwt__RsaPublicKeyPem=secretref:jwt-public-pem"
+    "google-client-secret=$GOOGLE_CLIENT_SECRET" `
+    "jwt-private-pem=$(Get-Content ./WealthTrackerServer/keys/private.pem -Raw)" `
+    "jwt-public-pem=$(Get-Content ./WealthTrackerServer/keys/public.pem -Raw)" `
+    "supabase-url=$SUPABASE_URL"
+
+# Check if app exists and deploy accordingly
+$apiExists = az containerapp show -g $RG -n $API_APP 2>&1
+
+if ($apiExists -match "ResourceNotFound") {
+    # Create new app
+    Write-Host "Creating new API app..."
+    az containerapp create `
+      -g $RG `
+      -n $API_APP `
+      --environment $ENV_NAME `
+      --image "$ACR_NAME.azurecr.io/wealthtracker-api:1" `
+      --ingress external `
+      --target-port 5141 `
+      --registry-server "$ACR_NAME.azurecr.io" `
+      --secrets `
+        "google-client-secret=$GOOGLE_CLIENT_SECRET" `
+        "supabase-url=$SUPABASE_URL" `
+      --env-vars `
+        "PORT=5141" `
+        "MIGRATE_ON_STARTUP=1" `
+        "FrontendUrl=https://<TO_BE_UPDATED>" `
+        "MarketDataService__BaseUrl=http://$MARKETDATA_APP" `
+        "ConnectionStrings__DefaultConnection=secretref:supabase-url" `
+        "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID" `
+        "Authentication__Google__ClientSecret=secretref:google-client-secret" `
+        "Authentication__Google__RedirectUri=https://<TO_BE_UPDATED>/auth/callback" `
+        "Authentication__Jwt__Issuer=WealthTracker" `
+        "Authentication__Jwt__Audience=WealthTrackerApi" `
+        "Authentication__Jwt__AccessTokenExpirationMinutes=60" `
+        "Authentication__Jwt__RefreshTokenExpirationDays=7" `
+        "Authentication__Jwt__RsaPrivateKeyPath=/app/secrets/private.pem" `
+        "Authentication__Jwt__RsaPublicKeyPath=/app/secrets/public.pem"
+} else {
+    # Update existing app with --replace
+    Write-Host "Updating existing API app..."
+    az containerapp update `
+      -g $RG `
+      -n $API_APP `
+      --image "$ACR_NAME.azurecr.io/wealthtracker-api:1" `
+      --replace
+}
 ```
 
-After creation, get the API FQDN:
+**Get your API URL:**
 
 ```powershell
-az containerapp show -g $RG -n $API_APP --query properties.configuration.ingress.fqdn -o tsv
+$API_FQDN=$(az containerapp show -g $RG -n $API_APP --query properties.configuration.ingress.fqdn -o tsv)
+Write-Host "API URL: https://$API_FQDN"
+# Example output: https://wealthtracker-api.xxxxxxxxxxx.eastus.azurecontainerapps.io
 ```
 
-## 6) Deploy `web` container app (external)
+## Step 6: Deploy Web Frontend (Public)
 
-The web container reads runtime config from environment variables and generates `/env.js` at startup.
+The frontend is a static React app that calls the API.
 
 ```powershell
 $WEB_APP="wealthtracker-web"
-$API_FQDN="<YOUR_API_FQDN>"
 
-az containerapp create `
-  -g $RG `
-  -n $WEB_APP `
-  --environment $ENV_NAME `
-  --image "$ACR_NAME.azurecr.io/wealthtracker-web:1" `
-  --ingress external `
-  --target-port 8080 `
-  --registry-server "$ACR_NAME.azurecr.io" `
-  --env-vars `
-    "PORT=8080" `
-    "API_BASE_URL=https://$API_FQDN/api" `
-    "GOOGLE_CLIENT_ID=<VALUE>" `
-    "GOOGLE_REDIRECT_URI=https://<YOUR_WEB_FQDN>/auth/callback"
+# Check if app exists and deploy accordingly
+$webExists = az containerapp show -g $RG -n $WEB_APP 2>&1
+
+if ($webExists -match "ResourceNotFound") {
+    # Create new app
+    Write-Host "Creating new web app..."
+    az containerapp create `
+      -g $RG `
+      -n $WEB_APP `
+      --environment $ENV_NAME `
+      --image "$ACR_NAME.azurecr.io/wealthtracker-web:1" `
+      --ingress external `
+      --target-port 8080 `
+      --registry-server "$ACR_NAME.azurecr.io" `
+      --env-vars `
+        "PORT=8080" `
+        "API_BASE_URL=https://$API_FQDN/api" `
+        "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" `
+        "GOOGLE_REDIRECT_URI=https://<TO_BE_UPDATED>/auth/callback" `
+        "SCANNER_REFRESH_SECONDS=300"
+} else {
+    # Update existing app with --replace
+    Write-Host "Updating existing web app..."
+    az containerapp update `
+      -g $RG `
+      -n $WEB_APP `
+      --image "$ACR_NAME.azurecr.io/wealthtracker-web:1" `
+      --replace
+}
 ```
 
-Get the web FQDN:
+**Get your Web URL:**
 
 ```powershell
-az containerapp show -g $RG -n $WEB_APP --query properties.configuration.ingress.fqdn -o tsv
+$WEB_FQDN=$(az containerapp show -g $RG -n $WEB_APP --query properties.configuration.ingress.fqdn -o tsv)
+Write-Host "Web URL: https://$WEB_FQDN"
+# Example output: https://wealthtracker-web.xxxxxxxxxxx.eastus.azurecontainerapps.io
 ```
 
-## 7) OAuth redirect + CORS checklist
+## Step 7: Update Environment Variables with Real URLs
 
-You usually need to update these values when moving from localhost to Azure:
+Now that you have actual URLs, update the apps:
 
-- **Google Cloud Console** OAuth redirect URI: `https://<YOUR_WEB_FQDN>/auth/callback`
-- API CORS origin (`FrontendUrl`): `https://<YOUR_WEB_FQDN>`
-- Frontend `API_BASE_URL`: `https://<YOUR_API_FQDN>/api`
+```powershell
+# Update API with correct FrontendUrl (for CORS) and RedirectUri
+az containerapp update `
+  -g $RG `
+  -n $API_APP `
+  --env-vars `
+    "FrontendUrl=https://$WEB_FQDN" `
+    "Authentication__Google__RedirectUri=https://$WEB_FQDN/auth/callback"
 
-## Common pitfalls
+# Update Web with correct RedirectUri
+az containerapp update `
+  -g $RG `
+  -n $WEB_APP `
+  --env-vars `
+    "GOOGLE_REDIRECT_URI=https://$WEB_FQDN/auth/callback"
+```
 
-- **Port mismatch**: ensure `--target-port` matches the container `PORT`.
-- **Secrets don’t apply automatically**: after changing secrets, deploy a new revision or restart revisions (see secrets docs).
-- **Frontend API URL**: don’t point `API_BASE_URL` to an internal-only hostname; browsers can’t resolve internal Container Apps DNS.
+## Step 8: Configure Google OAuth
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Find your OAuth 2.0 credentials
+3. Add these **Authorized redirect URIs**:
+   ```
+   https://<YOUR_WEB_FQDN>/auth/callback
+   ```
+   Example: `https://wealthtracker-web.xxx.eastus.azurecontainerapps.io/auth/callback`
+
+4. Add this **Authorized JavaScript origin**:
+   ```
+   https://<YOUR_WEB_FQDN>
+   ```
+
+## Step 9: Verify Deployment
+
+Test all services:
+
+```powershell
+# Test API health
+curl "https://$API_FQDN/api/health"
+
+# Test market data through API
+curl -X POST "https://$API_FQDN/api/scanner/day-gainers" `
+  -H "Content-Type: application/json" `
+  -d '{"universeLimit": 10, "limit": 5}'
+
+# Open web app in browser
+Start-Process "https://$WEB_FQDN"
+```
+
+Check logs if something fails:
+
+```powershell
+# View real-time logs
+az containerapp logs show -g $RG -n $API_APP --follow
+az containerapp logs show -g $RG -n $WEB_APP --follow
+az containerapp logs show -g $RG -n $MARKETDATA_APP --follow
+```
+
+## Architecture Details
+
+### How Services Communicate
+
+```
+User Browser
+     ↓ HTTPS
+Web Frontend (React)
+     ↓ HTTPS /api/*
+API Backend (.NET)
+     ↓ HTTP (internal)
+Market Data (Python) ←→ Upstash Redis (cached data)
+     ↓
+Yahoo Finance API
+```
+
+### Why This Design Works
+
+**Azure Container Apps Free Tier includes:**
+- 180,000 vCPU-seconds/month (~2,000 hours of 0.25 vCPU)
+- 360,000 GiB-seconds/month (~4,000 hours of 0.25 GB RAM)
+- 2 million requests/month
+
+**With scale-to-zero enabled:**
+- Each app runs with 0.25 vCPU + 0.5 GB RAM when active
+- Apps scale to zero when not in use, minimizing costs
+- Expected cost: **$0-5/month** (within Azure free tier)
+
+### Service Configuration Summary
+
+| Service | Port | Ingress | Min Replicas | Max Replicas |
+|---------|------|---------|--------------|--------------|
+| web | 8080 | External | 0 (scales to zero) | 1-3 |
+| api | 5141 | External | 0 (scales to zero) | 1-3 |
+| market-data | 8001 | Internal | 0 (scales to zero) | 1 |
+
+## Environment Variables Reference
+
+### Market Data Service
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `PORT` | `8001` | Service port |
+| `REDIS_URL` | `rediss://...` | Upstash Redis connection |
+| `CACHE_TTL_SECONDS` | `300` | Cache expiry (5 minutes) |
+| `SCANNER_UNIVERSE_LIMIT` | `25` | Max stocks to scan |
+| `SCANNER_RESULTS_LIMIT` | `25` | Max results to return |
+
+### API Service
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `PORT` | `5141` | Service port |
+| `MIGRATE_ON_STARTUP` | `1` | Auto-run DB migrations |
+| `FrontendUrl` | `https://...` | CORS origin |
+| `MarketDataService__BaseUrl` | `http://...` | Internal market-data URL |
+| `ConnectionStrings__DefaultConnection` | `Host=...;Database=...` | Supabase Npgsql connection string |
+| `Authentication__Google__ClientId` | `...` | OAuth client ID |
+| `Authentication__Google__ClientSecret` | `secretref:...` | OAuth secret |
+| `Authentication__Google__RedirectUri` | `https://...` | OAuth callback |
+| `Authentication__Jwt__*` | Various | JWT configuration |
+
+### Web Frontend
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `PORT` | `8080` | Service port |
+| `API_BASE_URL` | `https://.../api` | Backend API URL |
+| `GOOGLE_CLIENT_ID` | `...` | OAuth client ID |
+| `GOOGLE_REDIRECT_URI` | `https://...` | OAuth callback |
+| `SCANNER_REFRESH_SECONDS` | `300` | Auto-refresh interval |
+
+## Troubleshooting
+
+### Issue: "Cannot connect to Redis"
+
+**Symptoms:** Market data returns errors, scanners don't work
+
+**Fix:**
+```powershell
+# Verify Redis URL format (must be rediss:// for Upstash)
+az containerapp show -g $RG -n $MARKETDATA_APP --query properties.configuration.env
+
+# Update if needed
+az containerapp update `
+  -g $RG `
+  -n $MARKETDATA_APP `
+  --env-vars "REDIS_URL=rediss://default:PASSWORD@HOST.upstash.io:6379"
+```
+
+### Issue: "Database connection failed"
+
+**Symptoms:** API crashes on startup, migrations fail
+
+**Fix:**
+- Check Supabase connection string format
+- Ensure database `WealthTracker` exists
+- Verify password is correct
+- Check Supabase project is active (not paused)
+
+### Issue: "Google OAuth not working"
+
+**Symptoms:** Login fails, redirect URI errors
+
+**Fix:**
+1. Check redirect URI in Google Console matches exactly
+2. Verify `FrontendUrl` and `GOOGLE_REDIRECT_URI` env vars
+3. No trailing slashes mismatches
+4. HTTPS (not HTTP)
+
+### Issue: "Services can't communicate"
+
+**Symptoms:** API can't reach market-data
+
+**Fix:**
+```powershell
+# Check market-data is internal ingress
+az containerapp show -g $RG -n $MARKETDATA_APP --query properties.configuration.ingress.external
+# Should return: false
+
+# Verify DNS resolution works (access via ACA internal ingress)
+az containerapp exec -g $RG -n $API_APP --command "curl http://$MARKETDATA_APP/health"
+```
+
+## Cleanup
+
+To remove all deployed resources:
+
+```powershell
+# Delete entire resource group (removes all Azure resources)
+az group delete -n $RG --yes
+
+# Also delete external resources:
+# - Supabase project (via Supabase dashboard)
+# - Upstash database (via Upstash dashboard)
+```
+
+## References
+
+- [Azure Container Apps Documentation](https://learn.microsoft.com/en-us/azure/container-apps/)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Upstash Documentation](https://docs.upstash.com/redis)
+- [Azure Container Apps Pricing](https://azure.microsoft.com/en-us/pricing/details/container-apps/)
+- [Original docker-compose setup](../docker-compose.override.yml)
+
+## Need Help?
+
+If you encounter issues:
+1. Check logs: `az containerapp logs show -g $RG -n <app-name> --follow`
+2. Verify environment variables: `az containerapp show -g $RG -n <app-name> --query properties.configuration.env`
+3. Test connections from within containers using `az containerapp exec`
+4. Review this document's troubleshooting section
