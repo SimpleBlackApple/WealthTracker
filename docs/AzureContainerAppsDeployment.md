@@ -69,7 +69,7 @@ The original approach used Azure's managed services (Redis and PostgreSQL), whic
    Host=ep-xxxx-pooler.xxx.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=[PASSWORD];SSL Mode=Require
    ```
 
-   Neon may also show a URL-style connection string (e.g. `postgresql://...?...`). WealthTracker accepts either format for `ConnectionStrings__DefaultConnection`.
+   **Important**: Use `SSL Mode=Require` (not `VerifyFull`) to avoid certificate validation issues in Docker/Azure Container Apps.
 4. **Important**: Keep this secure! You'll need it in Step 4.
 
 **Notes:**
@@ -507,7 +507,8 @@ az containerapp update `
 
 **Fix:**
 - Check Neon connection string format
-- Ensure database `WealthTracker` exists
+- **Important**: Use `SSL Mode=Require` (not `VerifyFull`). `VerifyFull` requires strict certificate validation which may fail in Docker/Azure Container Apps.
+- Ensure database exists (you may need to create it first in Neon SQL Editor)
 - Verify password is correct
 - Check Neon project is active (not paused)
 
