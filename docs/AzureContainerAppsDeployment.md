@@ -89,7 +89,7 @@ The original approach used Azure's managed services (Redis and PostgreSQL), whic
 
 1. In Upstash console, click your database
 2. Find "redis-cli" section
-3. Copy the **UPSTASH_REDIS_REST_URL** or use the Redis protocol URL
+3. Copy the Redis protocol URL (`rediss://...`) or the REST credentials (**UPSTASH_REDIS_REST_URL** + **UPSTASH_REDIS_REST_TOKEN**)
 4. The format should be:
    ```
    rediss://default:xxxxxxxx@xxxxxxxx.upstash.io:6379
@@ -455,6 +455,8 @@ Yahoo Finance API
 |----------|-------|-------------|
 | `PORT` | `8001` | Service port |
 | `REDIS_URL` | `rediss://...` | Upstash Redis connection |
+| `UPSTASH_REDIS_REST_URL` | `https://...` | Upstash REST endpoint (optional alternative) |
+| `UPSTASH_REDIS_REST_TOKEN` | `...` | Upstash REST token (optional alternative) |
 | `CACHE_TTL_SECONDS` | `300` | Cache expiry (5 minutes) |
 | `SCANNER_UNIVERSE_LIMIT` | `25` | Max stocks to scan |
 | `SCANNER_RESULTS_LIMIT` | `25` | Max results to return |

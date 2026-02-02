@@ -3,13 +3,14 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-import redis
 import yfinance as yf
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+
+from cache import create_cache_client
 
 try:
     from dotenv import load_dotenv
@@ -20,7 +21,6 @@ except ImportError:
 
 app = FastAPI(title="Market Data Service")
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 MIN_PRICE_FLOOR = float(os.getenv("MIN_PRICE_FLOOR", "1.5"))
 HOD_APPROACH_DEFAULT_MAX_DIST_PCT = 2.0
@@ -82,7 +82,7 @@ REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD = (os.getenv("REL_VOL_REUSE_PRIMARY_1M_DOWNLOA
 
 INTRADAY_MAX_DAYS_BY_INTERVAL = {"1m": 7}
 
-redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+cache_client = create_cache_client()
 
 
 def utc_now_iso() -> str:
@@ -91,8 +91,8 @@ def utc_now_iso() -> str:
 
 def read_cache(key: str) -> Optional[dict]:
     try:
-        cached = redis_client.get(key)
-    except redis.RedisError:
+        cached = cache_client.get(key)
+    except Exception:
         return None
     if not cached:
         return None
@@ -104,8 +104,8 @@ def read_cache(key: str) -> Optional[dict]:
 
 def write_cache(key: str, payload: dict) -> None:
     try:
-        redis_client.setex(key, CACHE_TTL_SECONDS, json.dumps(payload))
-    except redis.RedisError:
+        cache_client.setex(key, CACHE_TTL_SECONDS, json.dumps(payload))
+    except Exception:
         return
 
 
@@ -353,12 +353,12 @@ def _download_intraday(
         cache_key = f"md:barsdf:{ticker}:{interval}:{period}:prepost={1 if prepost else 0}"
         cached = None
         try:
-            raw = redis_client.get(cache_key)
-        except redis.RedisError:
+            raw = cache_client.get(cache_key)
+        except Exception:
             raw = None
         if raw:
             try:
-                payload = json.loads(raw)
+                payload = raw if isinstance(raw, dict) else json.loads(raw)
             except json.JSONDecodeError:
                 payload = None
             if isinstance(payload, dict):
@@ -408,8 +408,8 @@ def _download_intraday(
                                     "index": [ts.isoformat() for ts in df.index],
                                     "data": df.values.tolist(),
                                 }
-                                redis_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(payload))
-                            except redis.RedisError:
+                                cache_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(payload))
+                            except Exception:
                                 pass
         else:
             ticker = batch[0]
@@ -424,8 +424,8 @@ def _download_intraday(
                             "index": [ts.isoformat() for ts in df.index],
                             "data": df.values.tolist(),
                         }
-                        redis_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(payload))
-                    except redis.RedisError:
+                        cache_client.setex(cache_key, CACHE_TTL_SECONDS, json.dumps(payload))
+                    except Exception:
                         pass
 
     return frames

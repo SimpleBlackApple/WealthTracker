@@ -173,3 +173,19 @@ POSTGRES_TRUST_SERVER_CERTIFICATE=false
 - Connection string is automatically built from env vars: `Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SSL Mode=${POSTGRES_SSL_MODE};Trust Server Certificate=${POSTGRES_TRUST_SERVER_CERTIFICATE}`
 - For non-Docker local development, edit `WealthTrackerServer/appsettings.Development.json` directly
 - Neon provides IPv4 compatible connections (unlike Supabase free tier), making it work with Docker and Azure Container Apps
+
+### Redis Configuration (Local vs Remote)
+
+Redis is used by `MarketDataService` for caching.
+
+```bash
+# Local Docker Redis (default)
+REDIS_URL=redis://redis:6379/0
+
+# OR Remote Upstash (Option A: Redis protocol over TLS)
+REDIS_URL=rediss://default:YOUR_PASSWORD@YOUR_HOST.upstash.io:6379
+
+# OR Remote Upstash (Option B: Upstash REST; takes precedence over REDIS_URL)
+UPSTASH_REDIS_REST_URL=https://YOUR_UPSTASH_REST_HOST
+UPSTASH_REDIS_REST_TOKEN=YOUR_UPSTASH_REST_TOKEN
+```
