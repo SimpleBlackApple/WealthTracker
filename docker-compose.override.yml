@@ -36,7 +36,10 @@ services:
       MIGRATE_ON_STARTUP: "${MIGRATE_ON_STARTUP:-1}"
 
       FrontendUrl: "${FRONTEND_URL:-http://localhost:${WEB_HOST_PORT:-5173}}"
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-WealthTracker};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      # Connection string supports both local PostgreSQL and Neon
+      # - Local Docker Postgres typically doesn't have TLS enabled, so Prefer/Disable is recommended.
+      # - Neon: Require is the simplest (matches Neon docs); VerifyFull is stricter but requires valid CA roots.
+      ConnectionStrings__DefaultConnection: "Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-WealthTracker};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres};SSL Mode=${POSTGRES_SSL_MODE:-Prefer};Trust Server Certificate=${POSTGRES_TRUST_SERVER_CERTIFICATE:-false}"
       MarketDataService__BaseUrl: "http://market-data-service:${MARKETDATA_CONTAINER_PORT:-8001}"
 
       Authentication__Google__ClientId: "${GOOGLE_CLIENT_ID:-}"

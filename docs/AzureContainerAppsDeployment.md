@@ -24,7 +24,7 @@ The original approach used Azure's managed services (Redis and PostgreSQL), whic
 └─────────────────────────────────────────────────────────────┘
          ↓                           ↓
 ┌─────────────────┐        ┌─────────────────┐
-│   Upstash Redis │        │ Supabase Postgres│
+│   Upstash Redis │        │ Neon Postgres│
 │    (Free Tier)  │        │    (Free Tier)   │
 │   256MB / 500K  │        │   500MB storage  │
 │   commands/month│        │   200MB egress   │
@@ -38,44 +38,43 @@ The original approach used Azure's managed services (Redis and PostgreSQL), whic
 | **web** (React frontend) | Azure Container Apps | $0-2/month | Scales to zero, uses free tier |
 | **api** (.NET backend) | Azure Container Apps | $0-2/month | Scales to zero, uses free tier |
 | **market-data** (Python) | Azure Container Apps | $0-1/month | Internal only, minimal resources |
-| **PostgreSQL** | Supabase | **$0** | 500MB storage, suitable for development and testing |
+| **PostgreSQL** | Neon | **$0** | 500MB storage, IPv4 compatible, suitable for development and testing |
 | **Redis** | Upstash | **$0** | 256MB, 500K commands/month, 5min TTL |
 
 ## Prerequisites
 
 - **Azure CLI** (`az`) installed - [Install guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 - **Azure subscription** with valid payment method (though you'll stay in free tiers)
-- **Supabase account** (free) - [Sign up](https://supabase.com)
+- **Neon account** (free) - [Sign up](https://neon.tech)
 - **Upstash account** (free) - [Sign up](https://upstash.com)
 - **Google OAuth credentials** (for authentication)
 
 ## Step 1: Set Up Free Database Services
 
-### 1.1 Create Supabase Project (PostgreSQL)
+### 1.1 Create Neon Project (PostgreSQL)
 
-1. Go to [supabase.com](https://supabase.com) and create a free account
+1. Go to [neon.tech](https://neon.tech) and create a free account
 2. Click "New Project"
-3. Choose organization and project name (e.g., "wealthtracker")
-4. Set database password (save this!)
-5. Choose region (pick same region as Azure: `East US` recommended)
-6. Wait for database to be ready (~2 minutes)
+3. Choose project name (e.g., "wealthtracker")
+4. Select PostgreSQL version (15 or 16)
+5. Choose region (pick same region as Azure for lower latency)
+6. Click "Create Project"
 
 **Get your connection string:**
 
-1. In Supabase dashboard, go to **Settings** → **Database**
-2. Find "Connection string" section
-3. Copy the connection details and format as Npgsql connection string:
+1. In Neon dashboard, click **Connect**
+2. Select **Pooled connection** (recommended for serverless environments)
+3. Copy the connection string, it should look like:
    ```
-   Host=db.xxxxxxxx.supabase.co;Port=5432;Database=WealthTracker;Username=postgres;Password=[PASSWORD];SSL Mode=Require;Trust Server Certificate=true
+   Host=ep-xxxx-pooler.xxx.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=[PASSWORD];SSL Mode=Require
    ```
+
+   Neon may also show a URL-style connection string (e.g. `postgresql://...?...`). WealthTracker accepts either format for `ConnectionStrings__DefaultConnection`.
 4. **Important**: Keep this secure! You'll need it in Step 4.
 
-**Create the database:**
-
-```sql
--- In Supabase SQL Editor, run:
-CREATE DATABASE "WealthTracker";
-```
+**Notes:**
+- Neon provides **IPv4 compatible** connections (works seamlessly with Docker and Azure Container Apps)
+- The pooled connection handles connection pooling automatically
 
 ### 1.2 Create Upstash Redis Database
 
@@ -239,7 +238,7 @@ The API needs PostgreSQL connection and talks to market-data internally.
 
 ```powershell
 $API_APP="wealthtracker-api"
-$SUPABASE_URL="Host=db.xxxxxxxx.supabase.co;Port=5432;Database=WealthTracker;Username=postgres;Password=YOUR_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
+$NEON_URL="Host=ep-xxxx-pooler.xxx.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;SSL Mode=Require"
 $GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID"
 $GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_SECRET"
 
@@ -251,7 +250,7 @@ az containerapp secret set `
     "google-client-secret=$GOOGLE_CLIENT_SECRET" `
     "jwt-private-pem=$(Get-Content ./WealthTrackerServer/keys/private.pem -Raw)" `
     "jwt-public-pem=$(Get-Content ./WealthTrackerServer/keys/public.pem -Raw)" `
-    "supabase-url=$SUPABASE_URL"
+    "neon-url=$NEON_URL"
 
 # Check if app exists and deploy accordingly
 $apiExists = az containerapp show -g $RG -n $API_APP 2>&1
@@ -269,13 +268,13 @@ if ($apiExists -match "ResourceNotFound") {
       --registry-server "$ACR_NAME.azurecr.io" `
       --secrets `
         "google-client-secret=$GOOGLE_CLIENT_SECRET" `
-        "supabase-url=$SUPABASE_URL" `
+        "neon-url=$NEON_URL" `
       --env-vars `
         "PORT=5141" `
         "MIGRATE_ON_STARTUP=1" `
         "FrontendUrl=https://<TO_BE_UPDATED>" `
         "MarketDataService__BaseUrl=http://$MARKETDATA_APP" `
-        "ConnectionStrings__DefaultConnection=secretref:supabase-url" `
+        "ConnectionStrings__DefaultConnection=secretref:neon-url" `
         "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID" `
         "Authentication__Google__ClientSecret=secretref:google-client-secret" `
         "Authentication__Google__RedirectUri=https://<TO_BE_UPDATED>/auth/callback" `
@@ -468,7 +467,7 @@ Yahoo Finance API
 | `MIGRATE_ON_STARTUP` | `1` | Auto-run DB migrations |
 | `FrontendUrl` | `https://...` | CORS origin |
 | `MarketDataService__BaseUrl` | `http://...` | Internal market-data URL |
-| `ConnectionStrings__DefaultConnection` | `Host=...;Database=...` | Supabase Npgsql connection string |
+| `ConnectionStrings__DefaultConnection` | `Host=...;Database=...` | Neon Npgsql connection string |
 | `Authentication__Google__ClientId` | `...` | OAuth client ID |
 | `Authentication__Google__ClientSecret` | `secretref:...` | OAuth secret |
 | `Authentication__Google__RedirectUri` | `https://...` | OAuth callback |
@@ -507,10 +506,10 @@ az containerapp update `
 **Symptoms:** API crashes on startup, migrations fail
 
 **Fix:**
-- Check Supabase connection string format
+- Check Neon connection string format
 - Ensure database `WealthTracker` exists
 - Verify password is correct
-- Check Supabase project is active (not paused)
+- Check Neon project is active (not paused)
 
 ### Issue: "Google OAuth not working"
 
@@ -545,14 +544,14 @@ To remove all deployed resources:
 az group delete -n $RG --yes
 
 # Also delete external resources:
-# - Supabase project (via Supabase dashboard)
+# - Neon project (via Neon dashboard)
 # - Upstash database (via Upstash dashboard)
 ```
 
 ## References
 
 - [Azure Container Apps Documentation](https://learn.microsoft.com/en-us/azure/container-apps/)
-- [Supabase Documentation](https://supabase.com/docs)
+- [Neon Documentation](https://neon.tech/docs)
 - [Upstash Documentation](https://docs.upstash.com/redis)
 - [Azure Container Apps Pricing](https://azure.microsoft.com/en-us/pricing/details/container-apps/)
 - [Original docker-compose setup](../docker-compose.override.yml)

@@ -139,3 +139,37 @@ For Azure, prefer secrets and use PEM via:
 ### Database migrations
 
 `docker compose` sets `MIGRATE_ON_STARTUP=1` for the API container to apply EF Core migrations on boot.
+
+### Database Configuration (Local vs Remote)
+
+The database connection is configured entirely via environment variables in `.env`:
+
+```bash
+# Local Docker PostgreSQL (default)
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=WealthTracker
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_SSL_MODE=Prefer
+POSTGRES_TRUST_SERVER_CERTIFICATE=false
+
+# OR Remote PostgreSQL (e.g., Neon)
+POSTGRES_HOST=ep-xxx-pooler.ap-southeast-2.aws.neon.tech
+POSTGRES_PORT=5432
+POSTGRES_DB=neondb
+POSTGRES_USER=neondb_owner
+POSTGRES_PASSWORD=your_neon_password
+POSTGRES_SSL_MODE=Require
+POSTGRES_TRUST_SERVER_CERTIFICATE=false
+```
+
+**To switch between local and remote database:**
+1. Edit `.env` file and change `POSTGRES_HOST` and database credentials
+2. Run `docker compose up -d`
+
+**Notes:**
+- When using remote database, the local `postgres` service will still start but won't be used
+- Connection string is automatically built from env vars: `Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SSL Mode=${POSTGRES_SSL_MODE};Trust Server Certificate=${POSTGRES_TRUST_SERVER_CERTIFICATE}`
+- For non-Docker local development, edit `WealthTrackerServer/appsettings.Development.json` directly
+- Neon provides IPv4 compatible connections (unlike Supabase free tier), making it work with Docker and Azure Container Apps
