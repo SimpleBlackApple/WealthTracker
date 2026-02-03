@@ -10,6 +10,8 @@ public class JwtService : IJwtService
   private readonly IConfiguration _configuration;
   private readonly RSA _rsa;
 
+  private static string NormalizePem(string pem) => pem.Replace("\\n", "\n").Replace("\\r", "\r");
+
   public JwtService(IConfiguration configuration)
   {
     _configuration = configuration;
@@ -25,7 +27,7 @@ public class JwtService : IJwtService
     _rsa = RSA.Create();
     if (!string.IsNullOrEmpty(privateKeyPem))
     {
-      _rsa.ImportFromPem(privateKeyPem);
+      _rsa.ImportFromPem(NormalizePem(privateKeyPem));
     }
     else
     {
@@ -97,7 +99,7 @@ public class JwtService : IJwtService
     using var rsa = RSA.Create();
     if (!string.IsNullOrEmpty(publicKeyPem))
     {
-      rsa.ImportFromPem(publicKeyPem);
+      rsa.ImportFromPem(NormalizePem(publicKeyPem));
     }
     else
     {

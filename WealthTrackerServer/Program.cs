@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -10,6 +11,8 @@ using WealthTrackerServer.Options;
 using WealthTrackerServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+static string NormalizePem(string pem) => pem.Replace("\\n", "\n").Replace("\\r", "\r");
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -52,7 +55,7 @@ if (string.IsNullOrEmpty(publicKeyPath) && string.IsNullOrEmpty(publicKeyPem))
 using var rsa = RSA.Create();
 if (!string.IsNullOrEmpty(publicKeyPem))
 {
-  rsa.ImportFromPem(publicKeyPem);
+  rsa.ImportFromPem(NormalizePem(publicKeyPem));
 }
 else
 {
@@ -79,6 +82,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
   });
 
 builder.Services.AddAuthorization();
+
+// Trust reverse-proxy headers (Azure Container Apps terminates TLS at the edge).
+// Without this, UseHttpsRedirection() can cause redirect loops.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+  options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+  options.KnownNetworks.Clear();
+  options.KnownProxies.Clear();
+});
 
 // Configure CORS for frontend
 var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:5173";
@@ -113,6 +125,8 @@ if (app.Environment.IsDevelopment())
     options.DocumentPath = "/openapi/v1.json";
   });
 }
+
+app.UseForwardedHeaders();
 
 app.UseHttpsRedirection();
 

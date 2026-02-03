@@ -2,6 +2,8 @@
 
 This guide shows you how to deploy WealthTracker to **Azure Container Apps** using a **cost-optimized architecture** with managed database services.
 
+If you want **automatic redeploys after each Git commit**, follow `docs/AzureContainerAppsDeployment-GitHubActions.md` instead.
+
 ## Why This Architecture?
 
 The original approach used Azure's managed services (Redis and PostgreSQL), which cost **$30-50+/month** minimum. This new design uses **free tiers** from third-party providers while keeping your applications on Azure Container Apps.
@@ -113,7 +115,7 @@ Open PowerShell or Azure Cloud Shell and run:
 ```powershell
 # Set variables
 $RG="wealthtracker-rg"
-$LOC="eastus"
+$LOC="australiaeast"
 $ACR_NAME="wealthtrackeracr$((Get-Random -Maximum 9999))"
 $ENV_NAME="wealthtracker-env"
 
@@ -300,7 +302,7 @@ if ($apiExists -match "ResourceNotFound") {
 ```powershell
 $API_FQDN=$(az containerapp show -g $RG -n $API_APP --query properties.configuration.ingress.fqdn -o tsv)
 Write-Host "API URL: https://$API_FQDN"
-# Example output: https://wealthtracker-api.xxxxxxxxxxx.eastus.azurecontainerapps.io
+# Example output: https://wealthtracker-api.xxxxxxxxxxx.australiaeast.azurecontainerapps.io
 ```
 
 ## Step 6: Deploy Web Frontend (Public)
@@ -346,7 +348,7 @@ if ($webExists -match "ResourceNotFound") {
 ```powershell
 $WEB_FQDN=$(az containerapp show -g $RG -n $WEB_APP --query properties.configuration.ingress.fqdn -o tsv)
 Write-Host "Web URL: https://$WEB_FQDN"
-# Example output: https://wealthtracker-web.xxxxxxxxxxx.eastus.azurecontainerapps.io
+# Example output: https://wealthtracker-web.xxxxxxxxxxx.australiaeast.azurecontainerapps.io
 ```
 
 ## Step 7: Update Environment Variables with Real URLs
@@ -378,7 +380,7 @@ az containerapp update `
    ```
    https://<YOUR_WEB_FQDN>/auth/callback
    ```
-   Example: `https://wealthtracker-web.xxx.eastus.azurecontainerapps.io/auth/callback`
+   Example: `https://wealthtracker-web.xxx.australiaeast.azurecontainerapps.io/auth/callback`
 
 4. Add this **Authorized JavaScript origin**:
    ```
