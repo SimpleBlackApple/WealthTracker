@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          az extension add --name containerapp --upgrade
+          az extension add --name containerapp --upgrade --allow-preview true
 
           # Provider registration is a one-time, subscription-level operation.
           # If your GitHub Service Principal is scoped only to a Resource Group (recommended),
@@ -192,7 +192,7 @@ jobs:
           REVISION_SUFFIX="${GITHUB_SHA::7}"
           IMAGE="$ACR_LOGIN_SERVER/wealthtracker-market-data:$IMAGE_TAG"
 
-          BASE_ARGS=(
+          CREATE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$MARKETDATA_APP_NAME"
             --environment "$AZURE_CONTAINERAPPS_ENV"
@@ -211,6 +211,18 @@ jobs:
             --memory 0.5Gi
           )
 
+          UPDATE_ARGS=(
+            -g "$AZURE_RESOURCE_GROUP"
+            -n "$MARKETDATA_APP_NAME"
+            --image "$IMAGE"
+            --revision-suffix "$REVISION_SUFFIX"
+            --max-inactive-revisions 4
+            --min-replicas 0
+            --max-replicas 1
+            --cpu 0.25
+            --memory 0.5Gi
+          )
+
           ENV_VARS=(
             "PORT=8001"
             "REDIS_URL=$UPSTASH_REDIS_URL"
@@ -220,9 +232,9 @@ jobs:
           )
 
           if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$MARKETDATA_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${BASE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
+            az containerapp update "${UPDATE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
           else
-            az containerapp create "${BASE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
+            az containerapp create "${CREATE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
           fi
 
       - name: Deploy API (public)
@@ -249,7 +261,7 @@ jobs:
           JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_KEY_PEM//$'\r'/}"
           JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_ESCAPED//$'\n'/\\n}"
 
-          BASE_ARGS=(
+          CREATE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$API_APP_NAME"
             --environment "$AZURE_CONTAINERAPPS_ENV"
@@ -262,6 +274,18 @@ jobs:
             --max-inactive-revisions 4
             --ingress external
             --target-port 5141
+            --min-replicas 0
+            --max-replicas 1
+            --cpu 0.25
+            --memory 0.5Gi
+          )
+
+          UPDATE_ARGS=(
+            -g "$AZURE_RESOURCE_GROUP"
+            -n "$API_APP_NAME"
+            --image "$IMAGE"
+            --revision-suffix "$REVISION_SUFFIX"
+            --max-inactive-revisions 4
             --min-replicas 0
             --max-replicas 1
             --cpu 0.25
@@ -286,9 +310,9 @@ jobs:
           )
 
           if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$API_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${BASE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
+            az containerapp update "${UPDATE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
           else
-            az containerapp create "${BASE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
+            az containerapp create "${CREATE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
           fi
 
           API_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$API_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
@@ -307,7 +331,7 @@ jobs:
           IMAGE="$ACR_LOGIN_SERVER/wealthtracker-web:$IMAGE_TAG"
           API_BASE_URL="https://$API_FQDN/api"
 
-          BASE_ARGS=(
+          CREATE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$WEB_APP_NAME"
             --environment "$AZURE_CONTAINERAPPS_ENV"
@@ -326,6 +350,18 @@ jobs:
             --memory 0.5Gi
           )
 
+          UPDATE_ARGS=(
+            -g "$AZURE_RESOURCE_GROUP"
+            -n "$WEB_APP_NAME"
+            --image "$IMAGE"
+            --revision-suffix "$REVISION_SUFFIX"
+            --max-inactive-revisions 4
+            --min-replicas 0
+            --max-replicas 1
+            --cpu 0.25
+            --memory 0.5Gi
+          )
+
           ENV_VARS=(
             "PORT=8080"
             "API_BASE_URL=$API_BASE_URL"
@@ -335,9 +371,9 @@ jobs:
           )
 
           if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${BASE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
+            az containerapp update "${UPDATE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
           else
-            az containerapp create "${BASE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
+            az containerapp create "${CREATE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
           fi
 
           WEB_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
