@@ -189,6 +189,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Use a stable, short suffix on first create. Avoid forcing suffix on updates
+          # to prevent collisions when re-running the workflow for the same commit.
           REVISION_SUFFIX="${GITHUB_SHA::7}"
           IMAGE="$ACR_LOGIN_SERVER/wealthtracker-market-data:$IMAGE_TAG"
 
@@ -215,7 +217,6 @@ jobs:
             -g "$AZURE_RESOURCE_GROUP"
             -n "$MARKETDATA_APP_NAME"
             --image "$IMAGE"
-            --revision-suffix "$REVISION_SUFFIX"
             --max-inactive-revisions 4
             --min-replicas 0
             --max-replicas 1
@@ -225,6 +226,7 @@ jobs:
 
           ENV_VARS=(
             "PORT=8001"
+            "GIT_SHA=$GITHUB_SHA"
             "REDIS_URL=$UPSTASH_REDIS_URL"
             "UPSTASH_REDIS_REST_URL=$UPSTASH_REDIS_REST_URL"
             "UPSTASH_REDIS_REST_TOKEN=$UPSTASH_REDIS_REST_TOKEN"
@@ -296,7 +298,6 @@ jobs:
             -g "$AZURE_RESOURCE_GROUP"
             -n "$API_APP_NAME"
             --image "$IMAGE"
-            --revision-suffix "$REVISION_SUFFIX"
             --max-inactive-revisions 4
             --min-replicas 0
             --max-replicas 1
@@ -306,6 +307,7 @@ jobs:
 
           ENV_VARS=(
             "PORT=5141"
+            "GIT_SHA=$GITHUB_SHA"
             "MIGRATE_ON_STARTUP=1"
             "FrontendUrl=https://example.com"
             "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
@@ -366,7 +368,6 @@ jobs:
             -g "$AZURE_RESOURCE_GROUP"
             -n "$WEB_APP_NAME"
             --image "$IMAGE"
-            --revision-suffix "$REVISION_SUFFIX"
             --max-inactive-revisions 4
             --min-replicas 0
             --max-replicas 1
@@ -376,6 +377,7 @@ jobs:
 
           ENV_VARS=(
             "PORT=8080"
+            "GIT_SHA=$GITHUB_SHA"
             "API_BASE_URL=$API_BASE_URL"
             "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
             "GOOGLE_REDIRECT_URI=https://example.com/auth/callback"
