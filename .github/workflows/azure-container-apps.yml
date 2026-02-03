@@ -41,8 +41,34 @@ jobs:
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade
-          az provider register --namespace Microsoft.App --wait
-          az provider register --namespace Microsoft.OperationalInsights --wait
+
+          # Provider registration is a one-time, subscription-level operation.
+          # If your GitHub Service Principal is scoped only to a Resource Group (recommended),
+          # it will NOT have permission to register providers. In that case, register once
+          # manually (Azure Portal or `az provider register ...`) and rerun the workflow.
+          missing=0
+          for ns in Microsoft.App Microsoft.OperationalInsights Microsoft.ContainerRegistry; do
+            state="$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || true)"
+            if [ "$state" != "Registered" ]; then
+              echo "::error title=Azure provider not registered::$ns registrationState=$state"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            cat <<'EOF'
+          One or more Azure Resource Providers are not registered in this subscription.
+
+          Fix (run once with an account that has subscription-level permission):
+            az provider register --namespace Microsoft.App --wait
+            az provider register --namespace Microsoft.OperationalInsights --wait
+            az provider register --namespace Microsoft.ContainerRegistry --wait
+
+          Portal alternative:
+            Azure Portal -> Subscriptions -> (your subscription) -> Resource providers -> search + Register.
+          EOF
+            exit 1
+          fi
 
       - name: Provision resource group, ACR, and Container Apps environment
         shell: bash

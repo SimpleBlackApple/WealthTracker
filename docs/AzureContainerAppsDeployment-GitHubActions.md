@@ -38,6 +38,25 @@ You need:
 - A Redis URL (for the market-data cache)
 - Google OAuth credentials (Client ID + Client Secret)
 
+### Important: register Azure Resource Providers (one-time per subscription)
+
+Your workflow uses a GitHub Service Principal that is typically scoped to a Resource Group. That scope does not allow registering subscription-level resource providers.
+
+Before running the workflow the first time, register these providers once (run with your own Azure user that has subscription permissions):
+
+```powershell
+az login
+az account show
+
+az provider register --namespace Microsoft.App --wait
+az provider register --namespace Microsoft.OperationalInsights --wait
+az provider register --namespace Microsoft.ContainerRegistry --wait
+```
+
+Portal alternative:
+
+- Azure Portal -> Subscriptions -> (your subscription) -> Resource providers -> search and Register the same namespaces.
+
 ## Step 1 - Configure the workflow file
 
 This repo includes:
