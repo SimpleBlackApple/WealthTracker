@@ -261,6 +261,18 @@ jobs:
           JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_KEY_PEM//$'\r'/}"
           JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_ESCAPED//$'\n'/\\n}"
 
+          # Fail fast if the secrets look like file paths or non-PEM payloads.
+          # The app expects actual PEM content (with BEGIN/END lines), not a path like "/app/keys/public.pem".
+          if [[ "$JWT_PUBLIC_ESCAPED" != *"BEGIN PUBLIC KEY"* ]]; then
+            echo "::error title=Invalid JWT_PUBLIC_KEY_PEM::Expected PEM content containing 'BEGIN PUBLIC KEY'. Do not set this to a file path."
+            exit 1
+          fi
+
+          if [[ "$JWT_PRIVATE_ESCAPED" != *"BEGIN PRIVATE KEY"* && "$JWT_PRIVATE_ESCAPED" != *"BEGIN RSA PRIVATE KEY"* ]]; then
+            echo "::error title=Invalid JWT_PRIVATE_KEY_PEM::Expected PEM content containing 'BEGIN PRIVATE KEY' or 'BEGIN RSA PRIVATE KEY'. Do not set this to a file path."
+            exit 1
+          fi
+
           CREATE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$API_APP_NAME"

@@ -10,7 +10,20 @@ public class JwtService : IJwtService
   private readonly IConfiguration _configuration;
   private readonly RSA _rsa;
 
-  private static string NormalizePem(string pem) => pem.Replace("\\n", "\n").Replace("\\r", "\r");
+  private static string NormalizePem(string pem)
+  {
+    var normalized = pem.Trim();
+
+    if (
+      (normalized.StartsWith('"') && normalized.EndsWith('"')) ||
+      (normalized.StartsWith('\'') && normalized.EndsWith('\''))
+    )
+    {
+      normalized = normalized[1..^1].Trim();
+    }
+
+    return normalized.Replace("\\n", "\n").Replace("\\r", "\r");
+  }
 
   public JwtService(IConfiguration configuration)
   {

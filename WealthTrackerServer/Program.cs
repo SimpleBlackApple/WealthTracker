@@ -12,7 +12,20 @@ using WealthTrackerServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-static string NormalizePem(string pem) => pem.Replace("\\n", "\n").Replace("\\r", "\r");
+static string NormalizePem(string pem)
+{
+  var normalized = pem.Trim();
+
+  if (
+    (normalized.StartsWith('"') && normalized.EndsWith('"')) ||
+    (normalized.StartsWith('\'') && normalized.EndsWith('\''))
+  )
+  {
+    normalized = normalized[1..^1].Trim();
+  }
+
+  return normalized.Replace("\\n", "\n").Replace("\\r", "\r");
+}
 
 // Add services to the container
 builder.Services.AddControllers();

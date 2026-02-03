@@ -139,7 +139,14 @@ Optional:
 
 ### JWT signing keys (required)
 
-The backend requires an RSA key pair for JWT signing. For GitHub secrets, store them as a single line using literal `\n` sequences (so YAML/env handling is reliable).
+The backend requires an RSA key pair for JWT signing.
+
+Important:
+
+- These secrets must be the **PEM file contents**, not a file path.
+  - Good: starts with `-----BEGIN PUBLIC KEY-----` / `-----BEGIN PRIVATE KEY-----`
+  - Bad: `/app/keys/public.pem`
+- For GitHub secrets, store them as a single line using literal `\n` sequences (so YAML/env handling is reliable).
 
 Generate keys:
 
