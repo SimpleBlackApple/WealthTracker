@@ -192,7 +192,7 @@ jobs:
           REVISION_SUFFIX="${GITHUB_SHA::7}"
           IMAGE="$ACR_LOGIN_SERVER/wealthtracker-market-data:$IMAGE_TAG"
 
-          COMMON_ARGS=(
+          BASE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$MARKETDATA_APP_NAME"
             --environment "$AZURE_CONTAINERAPPS_ENV"
@@ -209,18 +209,20 @@ jobs:
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
-            --env-vars
-              "PORT=8001"
-              "REDIS_URL=$UPSTASH_REDIS_URL"
-              "UPSTASH_REDIS_REST_URL=$UPSTASH_REDIS_REST_URL"
-              "UPSTASH_REDIS_REST_TOKEN=$UPSTASH_REDIS_REST_TOKEN"
-              "CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-300}"
+          )
+
+          ENV_VARS=(
+            "PORT=8001"
+            "REDIS_URL=$UPSTASH_REDIS_URL"
+            "UPSTASH_REDIS_REST_URL=$UPSTASH_REDIS_REST_URL"
+            "UPSTASH_REDIS_REST_TOKEN=$UPSTASH_REDIS_REST_TOKEN"
+            "CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-300}"
           )
 
           if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$MARKETDATA_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${COMMON_ARGS[@]}" >/dev/null
+            az containerapp update "${BASE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
           else
-            az containerapp create "${COMMON_ARGS[@]}" >/dev/null
+            az containerapp create "${BASE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
           fi
 
       - name: Deploy API (public)
@@ -239,7 +241,15 @@ jobs:
           IMAGE="$ACR_LOGIN_SERVER/wealthtracker-api:$IMAGE_TAG"
           MARKETDATA_BASE_URL="http://$MARKETDATA_APP_NAME"
 
-          COMMON_ARGS=(
+          # Normalize PEM values so they are safe to pass via CLI args:
+          # - if the GitHub secret is multi-line, convert newlines to literal "\n"
+          # - if it's already one-line with "\n", leave it unchanged
+          JWT_PRIVATE_ESCAPED="${JWT_PRIVATE_KEY_PEM//$'\r'/}"
+          JWT_PRIVATE_ESCAPED="${JWT_PRIVATE_ESCAPED//$'\n'/\\n}"
+          JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_KEY_PEM//$'\r'/}"
+          JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_ESCAPED//$'\n'/\\n}"
+
+          BASE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$API_APP_NAME"
             --environment "$AZURE_CONTAINERAPPS_ENV"
@@ -256,27 +266,29 @@ jobs:
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
-            --env-vars
-              "PORT=5141"
-              "MIGRATE_ON_STARTUP=1"
-              "FrontendUrl=https://example.com"
-              "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
-              "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING"
-              "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID"
-              "Authentication__Google__ClientSecret=$GOOGLE_CLIENT_SECRET"
-              "Authentication__Google__RedirectUri=https://example.com/auth/callback"
-              "Authentication__Jwt__Issuer=WealthTracker"
-              "Authentication__Jwt__Audience=WealthTrackerApi"
-              "Authentication__Jwt__AccessTokenExpirationMinutes=60"
-              "Authentication__Jwt__RefreshTokenExpirationDays=7"
-              "Authentication__Jwt__RsaPrivateKeyPem=$JWT_PRIVATE_KEY_PEM"
-              "Authentication__Jwt__RsaPublicKeyPem=$JWT_PUBLIC_KEY_PEM"
+          )
+
+          ENV_VARS=(
+            "PORT=5141"
+            "MIGRATE_ON_STARTUP=1"
+            "FrontendUrl=https://example.com"
+            "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
+            "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING"
+            "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID"
+            "Authentication__Google__ClientSecret=$GOOGLE_CLIENT_SECRET"
+            "Authentication__Google__RedirectUri=https://example.com/auth/callback"
+            "Authentication__Jwt__Issuer=WealthTracker"
+            "Authentication__Jwt__Audience=WealthTrackerApi"
+            "Authentication__Jwt__AccessTokenExpirationMinutes=60"
+            "Authentication__Jwt__RefreshTokenExpirationDays=7"
+            "Authentication__Jwt__RsaPrivateKeyPem=$JWT_PRIVATE_ESCAPED"
+            "Authentication__Jwt__RsaPublicKeyPem=$JWT_PUBLIC_ESCAPED"
           )
 
           if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$API_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${COMMON_ARGS[@]}" >/dev/null
+            az containerapp update "${BASE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
           else
-            az containerapp create "${COMMON_ARGS[@]}" >/dev/null
+            az containerapp create "${BASE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
           fi
 
           API_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$API_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
@@ -295,7 +307,7 @@ jobs:
           IMAGE="$ACR_LOGIN_SERVER/wealthtracker-web:$IMAGE_TAG"
           API_BASE_URL="https://$API_FQDN/api"
 
-          COMMON_ARGS=(
+          BASE_ARGS=(
             -g "$AZURE_RESOURCE_GROUP"
             -n "$WEB_APP_NAME"
             --environment "$AZURE_CONTAINERAPPS_ENV"
@@ -312,18 +324,20 @@ jobs:
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
-            --env-vars
-              "PORT=8080"
-              "API_BASE_URL=$API_BASE_URL"
-              "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
-              "GOOGLE_REDIRECT_URI=https://example.com/auth/callback"
-              "SCANNER_REFRESH_SECONDS=${CACHE_TTL_SECONDS:-300}"
+          )
+
+          ENV_VARS=(
+            "PORT=8080"
+            "API_BASE_URL=$API_BASE_URL"
+            "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
+            "GOOGLE_REDIRECT_URI=https://example.com/auth/callback"
+            "SCANNER_REFRESH_SECONDS=${CACHE_TTL_SECONDS:-300}"
           )
 
           if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${COMMON_ARGS[@]}" >/dev/null
+            az containerapp update "${BASE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
           else
-            az containerapp create "${COMMON_ARGS[@]}" >/dev/null
+            az containerapp create "${BASE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
           fi
 
           WEB_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
@@ -331,13 +345,6 @@ jobs:
 
       - name: Finalize URLs (CORS + OAuth redirect URIs)
         shell: bash
-        env:
-          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
-          JWT_PUBLIC_KEY_PEM: ${{ secrets.JWT_PUBLIC_KEY_PEM }}
-          CACHE_TTL_SECONDS: ${{ secrets.CACHE_TTL_SECONDS }}
         run: |
           set -euo pipefail
 
@@ -347,32 +354,17 @@ jobs:
           az containerapp update \
             -g "$AZURE_RESOURCE_GROUP" \
             -n "$API_APP_NAME" \
-            --env-vars \
-              "PORT=5141" \
-              "MIGRATE_ON_STARTUP=1" \
+            --set-env-vars \
               "FrontendUrl=$WEB_URL" \
-              "MarketDataService__BaseUrl=http://$MARKETDATA_APP_NAME" \
-              "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING" \
-              "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID" \
-              "Authentication__Google__ClientSecret=$GOOGLE_CLIENT_SECRET" \
               "Authentication__Google__RedirectUri=$WEB_URL/auth/callback" \
-              "Authentication__Jwt__Issuer=WealthTracker" \
-              "Authentication__Jwt__Audience=WealthTrackerApi" \
-              "Authentication__Jwt__AccessTokenExpirationMinutes=60" \
-              "Authentication__Jwt__RefreshTokenExpirationDays=7" \
-              "Authentication__Jwt__RsaPrivateKeyPem=$JWT_PRIVATE_KEY_PEM" \
-              "Authentication__Jwt__RsaPublicKeyPem=$JWT_PUBLIC_KEY_PEM" \
             >/dev/null
 
           az containerapp update \
             -g "$AZURE_RESOURCE_GROUP" \
             -n "$WEB_APP_NAME" \
-            --env-vars \
-              "PORT=8080" \
+            --set-env-vars \
               "API_BASE_URL=$API_BASE_URL" \
-              "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" \
               "GOOGLE_REDIRECT_URI=$WEB_URL/auth/callback" \
-              "SCANNER_REFRESH_SECONDS=${CACHE_TTL_SECONDS:-300}" \
             >/dev/null
 
           echo "Deployed:"
