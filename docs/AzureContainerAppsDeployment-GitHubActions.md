@@ -233,6 +233,151 @@ curl -X POST "https://<YOUR_API_FQDN>/api/scanner/day-gainers" \
   -d '{"universeLimit":10,"limit":5}'
 ```
 
+## Troubleshooting and debugging
+
+This section captures the common failure modes we hit while getting this pipeline stable.
+
+### (1) Provider registration / AuthorizationFailed
+
+Symptom (GitHub Actions or local `az`):
+
+- `AuthorizationFailed ... does not have authorization to perform action 'Microsoft.App/register/action'`
+
+Cause:
+
+- Provider registration is subscription-scoped. If your GitHub Service Principal is scoped only to a Resource Group (recommended), it cannot register providers.
+
+Fix (run once with a subscription-level privileged account):
+
+```powershell
+az login
+az provider register --namespace Microsoft.App --wait
+az provider register --namespace Microsoft.OperationalInsights --wait
+az provider register --namespace Microsoft.ContainerRegistry --wait
+```
+
+Check status:
+
+```powershell
+az provider show --namespace Microsoft.App --query registrationState -o tsv
+```
+
+### (2) `containerapp` extension preview warnings
+
+Symptom:
+
+- Warnings that `containerapp` is preview / no stable version.
+
+Notes:
+
+- This is expected today; ACA CLI support lives in the `containerapp` extension.
+- The workflow installs/upgrades it with preview allowed.
+
+### (3) `az containerapp update` argument errors (create vs update flags)
+
+Symptoms:
+
+- `ERROR: unrecognized arguments: --env-vars ...`
+- `ERROR: unrecognized arguments: --environment ... --ingress ... --target-port ...`
+
+Cause:
+
+- `az containerapp create` and `az containerapp update` do not accept the same flags.
+
+Rule of thumb:
+
+- Use `--env-vars` with `az containerapp create`
+- Use `--set-env-vars` with `az containerapp update`
+- Flags like `--environment`, `--ingress`, `--target-port`, `--registry-server` belong to `create` (not `update`)
+
+### (4) Revision suffix collision on reruns
+
+Symptom:
+
+- `template.revisionsuffix is invalid ... revision with suffix <xxx> already exists`
+
+Cause:
+
+- A revision suffix must be unique for that app. Re-running the workflow for the same commit SHA can collide if you force a fixed suffix every time.
+
+Fix:
+
+- Only set `--revision-suffix` on first-time `create`, and do not force it on `update` (current workflow behavior).
+
+### Inspect revision status directly
+
+```powershell
+az containerapp revision list -g $RG -n $APP -o table
+```
+
+### Temporarily force a replica to exist (then stream logs)
+
+```powershell
+az containerapp update -g $RG -n $APP --min-replicas 1
+az containerapp logs show -g $RG -n $APP --type system --follow --tail 300
+```
+
+### (5) API crashes: JWT PEM format error
+
+Symptom (container log):
+
+- `System.ArgumentException: No supported key formats were found ... ImportPem(...)`
+
+Cause:
+
+- `JWT_PUBLIC_KEY_PEM` / `JWT_PRIVATE_KEY_PEM` are not valid PEM content.
+  - Common mistake: putting a file path like `/app/keys/public.pem` into the secret.
+  - Another mistake: broken multi-line copying.
+
+Fix:
+
+- Store the actual PEM contents in GitHub secrets.
+- Recommended: store them in one line with literal `\n` sequences (see Step 3).
+
+### (6) API crashes during migrations: database TLS / connection string mismatch
+
+Symptom (container log):
+
+- Stack trace around `SslStream.AuthenticateAsClient(...)` / `NpgsqlConnector.NegotiateEncryption(...)`
+- Crash happens at `db.Database.Migrate()` (because `MIGRATE_ON_STARTUP=1`)
+
+Cause:
+
+- The connection string is too strict for your runtime environment (for example `SSL Mode=VerifyFull` and/or `Channel Binding=Require`), or it’s not the correct Neon “pooled” host for server environments.
+
+Recommended connection string shape for ACA:
+
+- Prefer `SSL Mode=Require` (not `VerifyFull`)
+- Remove `Channel Binding=Require` unless you know you need it
+
+Example (shape only):
+
+```
+Host=<pooled-host>;Port=5432;Database=<db>;Username=<user>;Password=<pwd>;SSL Mode=Require;Trust Server Certificate=false
+```
+
+Emergency debugging tip:
+
+- Set `MIGRATE_ON_STARTUP=0` temporarily so the API can start, then fix DB connectivity/migrations without crash loops.
+
+### (7) Google OAuth redirect URI issues
+
+Symptoms:
+
+- Google login fails with redirect mismatch.
+
+Causes:
+
+- Redirect URIs in Google Cloud Console don’t match `https://<YOUR_WEB_FQDN>/auth/callback`.
+- The workflow failed before the “Finalize URLs” step, so the placeholder redirect URI was not replaced.
+
+Fix:
+
+- After the first successful deploy, add:
+  - Authorized origins: `https://<YOUR_WEB_FQDN>`
+  - Redirect URI: `https://<YOUR_WEB_FQDN>/auth/callback`
+- If the workflow previously failed mid-run, rerun it to ensure the final URLs are applied.
+
 ## Notes
 
 - Web runtime config is injected at container start (Nginx template + `env.js`):
