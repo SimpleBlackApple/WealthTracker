@@ -360,7 +360,27 @@ Emergency debugging tip:
 
 - Set `MIGRATE_ON_STARTUP=0` temporarily so the API can start, then fix DB connectivity/migrations without crash loops.
 
-### (7) Google OAuth redirect URI issues
+### (7) Scanner endpoints sometimes slow / intermittent market-data call failures
+
+Symptoms:
+
+- First scanner call after some idle time is slow.
+- Occasional stack traces around `HttpClient.SendAsync(...)` / `MarketDataClient.PostAsync(...)`, but later calls succeed.
+
+Common causes:
+
+- `wealthtracker-market-data` is set to scale-to-zero, so the first request may include cold start time.
+- Yahoo Finance calls (via `yfinance`) can be slow, especially on cache misses.
+- API-to-market-data timeout is too low (default is 15 seconds).
+
+Recommended fixes:
+
+- Increase API -> market-data timeout in Container Apps:
+  - Set `MarketDataService__TimeoutSeconds=60` on `wealthtracker-api` (the GitHub Actions workflow sets this).
+- Keep `CACHE_TTL_SECONDS=300` so most scans are served from Redis cache.
+- If you want consistently low latency (higher cost), set `minReplicas=1` for `wealthtracker-market-data`.
+
+### (8) Google OAuth redirect URI issues
 
 Symptoms:
 

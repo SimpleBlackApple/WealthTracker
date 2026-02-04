@@ -311,6 +311,7 @@ jobs:
             "MIGRATE_ON_STARTUP=1"
             "FrontendUrl=https://example.com"
             "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
+            "MarketDataService__TimeoutSeconds=60"
             "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING"
             "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID"
             "Authentication__Google__ClientSecret=$GOOGLE_CLIENT_SECRET"
