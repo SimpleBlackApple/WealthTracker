@@ -1201,7 +1201,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                 className={cn(
                                   'cursor-pointer transition-colors hover:bg-secondary/60',
                                   isSelected &&
-                                  'bg-primary/5 hover:bg-primary/10'
+                                  '!bg-primary/20 hover:!bg-primary/30'
                                 )}
                                 onClick={() => {
                                   setSelectedSymbol({ symbol, exchange })
