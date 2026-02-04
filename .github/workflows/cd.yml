@@ -308,7 +308,7 @@ jobs:
           ENV_VARS=(
             "PORT=5141"
             "GIT_SHA=$GITHUB_SHA"
-            "MIGRATE_ON_STARTUP=1"
+            "MIGRATE_ON_STARTUP=0"
             "FrontendUrl=https://example.com"
             "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
             "MarketDataService__TimeoutSeconds=60"
