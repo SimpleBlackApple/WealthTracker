@@ -61,7 +61,11 @@ Portal alternative:
 
 This repo includes:
 
+- `.github/workflows/ci.yml` (CI for pull requests)
 - `.github/workflows/cd.yml`
+
+CI runs on `pull_request` only (and manual dispatch), so you get fast feedback without re-running again after merge.
+CD runs on push to `main`, so merging a PR triggers deployment.
 
 Open that file and edit the `env:` block at the top:
 
