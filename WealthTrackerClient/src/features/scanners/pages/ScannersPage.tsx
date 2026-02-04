@@ -729,14 +729,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       }}
                       disabled={query.isFetching}
                       size="sm"
-                      className="h-8 px-4 bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
+                      className="h-8 px-4 bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm shadow-primary/20"
                     >
                       Run
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 w-8 p-0"
+                      className="h-8 w-8 p-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
                       onClick={() => {
                         if (
                           staleRevalidateGiveUpTimeoutIdRef.current !== null
@@ -768,14 +768,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         className={cn(
                           'h-3.5 w-3.5',
                           (query.isFetching || isAutoRevalidating) &&
-                            'animate-spin'
+                          'animate-spin'
                         )}
                       />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8"
+                      className="h-8 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
                       onClick={() => {
                         setSelectedSymbol(null)
                         setIsPanelVisible(true)
@@ -1063,7 +1063,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       onRemove={key => {
                         const defaultVal =
                           definition.defaultRequest[
-                            key as keyof typeof definition.defaultRequest
+                          key as keyof typeof definition.defaultRequest
                           ]
                         setDraftRequest(prev => ({
                           ...prev,
@@ -1156,7 +1156,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                   'whitespace-nowrap',
                                   col.align === 'right' && 'text-right',
                                   col.key === 'symbol' &&
-                                    'border-r border-border'
+                                  'border-r border-border'
                                 )}
                               >
                                 <button
@@ -1201,7 +1201,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                 className={cn(
                                   'cursor-pointer transition-colors hover:bg-secondary/60',
                                   isSelected &&
-                                    'bg-primary/5 hover:bg-primary/10'
+                                  'bg-primary/5 hover:bg-primary/10'
                                 )}
                                 onClick={() => {
                                   setSelectedSymbol({ symbol, exchange })
@@ -1219,9 +1219,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                       className={cn(
                                         'whitespace-nowrap',
                                         col.align === 'right' &&
-                                          'text-right font-variant-numeric tabular-nums',
+                                        'text-right font-variant-numeric tabular-nums',
                                         col.key === 'symbol' &&
-                                          'border-r border-border'
+                                        'border-r border-border'
                                       )}
                                     >
                                       {renderCell(col.key, value)}
@@ -1241,9 +1241,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                           {totalRows === 0
                             ? '0 rows'
                             : `${currentPageIndex * pageSize + 1}-${Math.min(
-                                (currentPageIndex + 1) * pageSize,
-                                totalRows
-                              )} of ${totalRows.toLocaleString()}`}
+                              (currentPageIndex + 1) * pageSize,
+                              totalRows
+                            )} of ${totalRows.toLocaleString()}`}
                         </div>
                         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                           <Button
@@ -1301,7 +1301,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 className={cn(
                   'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full bg-card shadow-md shadow-black/10 transition-all duration-300 border border-border/70',
                   !isPanelVisible &&
-                    'rotate-180 bg-secondary text-foreground hover:bg-secondary/80'
+                  'rotate-180 bg-secondary text-foreground hover:bg-secondary/80'
                 )}
                 onClick={() => setIsPanelVisible(!isPanelVisible)}
                 title={isPanelVisible ? 'Hide panel' : 'Show panel'}

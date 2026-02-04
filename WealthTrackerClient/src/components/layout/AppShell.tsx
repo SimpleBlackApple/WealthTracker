@@ -148,7 +148,7 @@ export function AppShell() {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-full"
+              className="h-9 w-9 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
               onClick={() => setSoundEnabled(!soundEnabled)}
               title={soundEnabled ? 'Disable sound' : 'Enable sound'}
               aria-label={soundEnabled ? 'Disable sound' : 'Enable sound'}
