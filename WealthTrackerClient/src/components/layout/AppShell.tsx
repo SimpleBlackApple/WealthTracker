@@ -82,7 +82,11 @@ export function AppShell() {
               className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-secondary/50"
               aria-label="WealthTracker home"
             >
-              <img src={logo} alt="WealthTracker" className="h-9 w-9 object-contain" />
+              <img
+                src={logo}
+                alt="WealthTracker"
+                className="h-9 w-9 object-contain"
+              />
               <div className="hidden sm:flex flex-col leading-tight">
                 <span className="font-display text-sm font-semibold tracking-tight">
                   WealthTracker
