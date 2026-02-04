@@ -402,24 +402,29 @@ Option A (recommended): **Azure Container Apps Job (Schedule trigger)** in the s
 Example (Azure CLI):
 
 ```bash
-# Runs every day at 00:05 UTC
+# Runs daily at 14:35 UTC
 az containerapp job create \
   --name "wealthtracker-warmup" \
   --resource-group "$RESOURCE_GROUP" \
   --environment "$CONTAINERAPPS_ENV" \
   --trigger-type "Schedule" \
-  --cron-expression "5 0 * * *" \
+  --cron-expression "35 14 * * *" \
+  --replica-retry-limit 1 \
+  --replica-completion-count 1 \
+  --parallelism 1 \
   --replica-timeout 1800 \
   --image "curlimages/curl:8.5.0" \
   --cpu "0.25" --memory "0.5Gi" \
   --command "/bin/sh" \
-  --args "-lc" 'set -eu; \
-    API="https://YOUR_API_FQDN/api"; \
+  --args "-lc 'set -eu; \
+    API=\"https://YOUR_API_FQDN/api\"; \
     for p in scanner/day-gainers scanner/hod-breakouts scanner/vwap-breakouts scanner/volume-spikes scanner/hod-approach scanner/vwap-approach; do \
-      echo "Warming $p"; \
-      curl -fsS -X POST "$API/$p" -H "Content-Type: application/json" -d "{}" >/dev/null; \
-    done'
+      echo \"Warming \$p\"; \
+      curl -fsS -X POST \"\$API/\$p\" -H \"Content-Type: application/json\" -d \"{}\" >/dev/null; \
+    done'"
 ```
+
+Note: Container Apps Job cron is evaluated in **UTC**.
 
 Option B: **Azure Functions (Timer trigger)** or **Logic Apps (Recurrence)** calling the same endpoints over HTTPS.
 

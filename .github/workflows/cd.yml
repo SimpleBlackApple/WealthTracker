@@ -428,18 +428,14 @@ jobs:
           set -euo pipefail
 
           JOB_NAME="wealthtracker-warmup"
-          CRON_EXPRESSION="5 0 * * *" # 00:05 UTC daily
+          # Container Apps Job cron is evaluated in UTC.
+          # Daily refresh at 14:35 UTC.
+          CRON_EXPRESSION="35 14 * * *"
           API_BASE_URL="https://$API_FQDN/api"
 
-          SCRIPT="$(cat <<EOF
-          set -eu
-          API="$API_BASE_URL"
-          for p in scanner/day-gainers scanner/hod-breakouts scanner/vwap-breakouts scanner/volume-spikes scanner/hod-approach scanner/vwap-approach; do
-            echo "Warming \$p"
-            curl -fsS -X POST "\$API/\$p" -H "Content-Type: application/json" -d "{}" >/dev/null
-          done
-          EOF
-          )"
+          # NOTE: `az containerapp job create/update --args` accepts a SINGLE string which is parsed
+          # into args. Use quotes so `/bin/sh -lc` receives the script as one argument.
+          ARGS="-lc 'set -eu; API=\"$API_BASE_URL\"; for p in scanner/day-gainers scanner/hod-breakouts scanner/vwap-breakouts scanner/volume-spikes scanner/hod-approach scanner/vwap-approach; do echo \"Warming \$p\"; curl -fsS -X POST \"\$API/\$p\" -H \"Content-Type: application/json\" -d \"{}\" >/dev/null; done'"
 
           if az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$JOB_NAME" >/dev/null 2>&1; then
             az containerapp job update \
@@ -448,9 +444,12 @@ jobs:
               --cron-expression "$CRON_EXPRESSION" \
               --image "curlimages/curl:8.5.0" \
               --cpu "0.25" --memory "0.5Gi" \
+              --replica-retry-limit 1 \
+              --replica-completion-count 1 \
+              --parallelism 1 \
               --replica-timeout 1800 \
               --command "/bin/sh" \
-              --args "-lc" "$SCRIPT" \
+              --args "$ARGS" \
               >/dev/null
           else
             az containerapp job create \
@@ -461,9 +460,12 @@ jobs:
               --cron-expression "$CRON_EXPRESSION" \
               --image "curlimages/curl:8.5.0" \
               --cpu "0.25" --memory "0.5Gi" \
+              --replica-retry-limit 1 \
+              --replica-completion-count 1 \
+              --parallelism 1 \
               --replica-timeout 1800 \
               --command "/bin/sh" \
-              --args "-lc" "$SCRIPT" \
+              --args "$ARGS" \
               >/dev/null
           fi
 
