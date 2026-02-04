@@ -401,7 +401,7 @@ export function OrderForm({
         <Button
           type="submit"
           disabled={!canSubmit || executeTrade.isPending}
-          className="h-10 w-full text-sm bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
+          className="h-10 w-full text-sm bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm shadow-primary/20"
         >
           {executeTrade.isPending ? 'Executing...' : executeButtonText}
         </Button>

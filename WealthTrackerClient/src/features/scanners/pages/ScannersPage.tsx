@@ -641,7 +641,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 to={`/scanners/${s.id}`}
                 className={({ isActive }) =>
                   cn(
-                    'relative flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-all hover:bg-white/40',
+                    'relative flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-all hover:bg-sidebar-accent',
                     isActive
                       ? 'bg-sidebar-active font-semibold text-foreground'
                       : 'text-muted-foreground'
@@ -729,14 +729,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       }}
                       disabled={query.isFetching}
                       size="sm"
-                      className="h-8 px-4 bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
+                      className="h-8 px-4 bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm shadow-primary/20"
                     >
                       Run
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 w-8 p-0"
+                      className="h-8 w-8 p-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
                       onClick={() => {
                         if (
                           staleRevalidateGiveUpTimeoutIdRef.current !== null
@@ -775,7 +775,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8"
+                      className="h-8 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
                       onClick={() => {
                         setSelectedSymbol(null)
                         setIsPanelVisible(true)
@@ -1199,9 +1199,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                               <TableRow
                                 key={`${symbol}-${idx}`}
                                 className={cn(
-                                  'cursor-pointer transition-colors hover:bg-secondary/60',
+                                  'cursor-pointer transition-colors hover:!bg-accent',
                                   isSelected &&
-                                    'bg-primary/5 hover:bg-primary/10'
+                                    '!bg-primary/20 hover:!bg-primary/30'
                                 )}
                                 onClick={() => {
                                   setSelectedSymbol({ symbol, exchange })

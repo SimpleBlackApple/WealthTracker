@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logo from '@/assets/logo.png'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   Check,
@@ -81,9 +82,11 @@ export function AppShell() {
               className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-secondary/50"
               aria-label="WealthTracker home"
             >
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary-light text-primary-foreground shadow-sm shadow-primary/20">
-                <span className="text-xs font-bold">WT</span>
-              </div>
+              <img
+                src={logo}
+                alt="WealthTracker"
+                className="h-9 w-9 object-contain"
+              />
               <div className="hidden sm:flex flex-col leading-tight">
                 <span className="font-display text-sm font-semibold tracking-tight">
                   WealthTracker
@@ -99,7 +102,7 @@ export function AppShell() {
                 to="/scanners"
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
+                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/90 hover:text-foreground',
                     isActive && 'bg-secondary text-foreground'
                   )
                 }
@@ -110,7 +113,7 @@ export function AppShell() {
                 to="/portfolio"
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
+                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/90 hover:text-foreground',
                     isActive && 'bg-secondary text-foreground'
                   )
                 }
@@ -149,7 +152,7 @@ export function AppShell() {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-full"
+              className="h-9 w-9 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
               onClick={() => setSoundEnabled(!soundEnabled)}
               title={soundEnabled ? 'Disable sound' : 'Enable sound'}
               aria-label={soundEnabled ? 'Disable sound' : 'Enable sound'}
