@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logo from '@/assets/logo.png'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   Check,
@@ -81,8 +82,8 @@ export function AppShell() {
               className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-secondary/50"
               aria-label="WealthTracker home"
             >
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary-light text-primary-foreground shadow-sm shadow-primary/20">
-                <span className="text-xs font-bold">WT</span>
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary-light/10 text-primary-foreground shadow-sm">
+                <img src={logo} alt="WealthTracker" className="h-6 w-6 object-contain" />
               </div>
               <div className="hidden sm:flex flex-col leading-tight">
                 <span className="font-display text-sm font-semibold tracking-tight">
