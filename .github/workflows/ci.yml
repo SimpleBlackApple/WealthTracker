@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (lint, test, build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: WealthTrackerClient/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: WealthTrackerClient
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        working-directory: WealthTrackerClient
+        run: pnpm format
+
+      - name: Lint
+        working-directory: WealthTrackerClient
+        run: pnpm lint
+
+      - name: Test
+        working-directory: WealthTrackerClient
+        run: pnpm test:run
+
+      - name: Build
+        working-directory: WealthTrackerClient
+        run: pnpm build
+
+  backend:
+    name: Backend (.NET build + tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore WealthTracker.sln
+
+      - name: Build
+        run: dotnet build WealthTracker.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test WealthTrackerServer.Tests/WealthTrackerServer.Tests.csproj -c Release --no-build
+
+  market-data:
+    name: Market data service (Python tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: MarketDataService/requirements.txt
+
+      - name: Install
+        working-directory: MarketDataService
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+
+      - name: Test
+        working-directory: MarketDataService
+        run: .venv/bin/python -m unittest discover -s tests

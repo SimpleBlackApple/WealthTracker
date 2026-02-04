@@ -61,7 +61,7 @@ Portal alternative:
 
 This repo includes:
 
-- `.github/workflows/azure-container-apps.yml`
+- `.github/workflows/cd.yml`
 
 Open that file and edit the `env:` block at the top:
 
