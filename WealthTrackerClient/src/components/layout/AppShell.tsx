@@ -98,7 +98,7 @@ export function AppShell() {
                 to="/scanners"
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
+                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/90 hover:text-foreground',
                     isActive && 'bg-secondary text-foreground'
                   )
                 }
@@ -109,7 +109,7 @@ export function AppShell() {
                 to="/portfolio"
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground',
+                    'rounded-lg px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/90 hover:text-foreground',
                     isActive && 'bg-secondary text-foreground'
                   )
                 }

@@ -641,7 +641,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                 to={`/scanners/${s.id}`}
                 className={({ isActive }) =>
                   cn(
-                    'relative flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-all hover:bg-white/40',
+                    'relative flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-all hover:bg-sidebar-accent',
                     isActive
                       ? 'bg-sidebar-active font-semibold text-foreground'
                       : 'text-muted-foreground'
@@ -1199,7 +1199,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                               <TableRow
                                 key={`${symbol}-${idx}`}
                                 className={cn(
-                                  'cursor-pointer transition-colors hover:bg-secondary/60',
+                                  'cursor-pointer transition-colors hover:!bg-accent',
                                   isSelected &&
                                   '!bg-primary/20 hover:!bg-primary/30'
                                 )}
