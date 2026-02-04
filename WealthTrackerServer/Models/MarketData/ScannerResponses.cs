@@ -2,6 +2,31 @@ using System.Text.Json.Serialization;
 
 namespace WealthTrackerServer.Models.MarketData;
 
+public class CacheInfo
+{
+    [JsonPropertyName("isStale")]
+    public bool IsStale { get; set; }
+
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = string.Empty;
+
+    [JsonPropertyName("fetchedAt")]
+    public DateTimeOffset FetchedAt { get; set; }
+
+    [JsonPropertyName("freshUntil")]
+    public DateTimeOffset FreshUntil { get; set; }
+
+    [JsonPropertyName("staleUntil")]
+    public DateTimeOffset StaleUntil { get; set; }
+
+    [JsonPropertyName("willRevalidate")]
+    public bool WillRevalidate { get; set; }
+
+    [JsonPropertyName("retryAfterMs")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RetryAfterMs { get; set; }
+}
+
 public class DayGainersResponse
 {
     [JsonPropertyName("scanner")]
@@ -15,6 +40,10 @@ public class DayGainersResponse
 
     [JsonPropertyName("results")]
     public List<DayGainerRow> Results { get; set; } = [];
+
+    [JsonPropertyName("cache")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CacheInfo? Cache { get; set; }
 }
 
 public class HodVwapMomentumResponse
@@ -30,6 +59,10 @@ public class HodVwapMomentumResponse
 
     [JsonPropertyName("results")]
     public List<IntradayMomentumRow> Results { get; set; } = [];
+
+    [JsonPropertyName("cache")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CacheInfo? Cache { get; set; }
 }
 
 public class HodVwapApproachResponse
@@ -45,6 +78,10 @@ public class HodVwapApproachResponse
 
     [JsonPropertyName("results")]
     public List<HodVwapApproachRow> Results { get; set; } = [];
+
+    [JsonPropertyName("cache")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CacheInfo? Cache { get; set; }
 }
 
 public class DayGainerRow

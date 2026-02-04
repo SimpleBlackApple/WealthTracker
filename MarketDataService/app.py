@@ -1,6 +1,7 @@
 import json
 import os
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import yfinance as yf
@@ -22,6 +23,16 @@ except ImportError:
 app = FastAPI(title="Market Data Service")
 
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+CACHE_STALE_TTL_SECONDS = int(os.getenv("CACHE_STALE_TTL_SECONDS", str(max(CACHE_TTL_SECONDS * 12, 86400))))
+if CACHE_STALE_TTL_SECONDS < CACHE_TTL_SECONDS:
+    CACHE_STALE_TTL_SECONDS = CACHE_TTL_SECONDS
+
+SERVE_STALE_WHILE_REVALIDATE = (os.getenv("SERVE_STALE_WHILE_REVALIDATE", "1") or "1").strip() not in {
+    "0",
+    "false",
+    "False",
+}
+STALE_RETRY_AFTER_MS = int(os.getenv("STALE_RETRY_AFTER_MS", "5000"))
 MIN_PRICE_FLOOR = float(os.getenv("MIN_PRICE_FLOOR", "1.5"))
 HOD_APPROACH_DEFAULT_MAX_DIST_PCT = 2.0
 HOD_APPROACH_ADAPTIVE_CAP_PCT = 2.5
@@ -107,6 +118,152 @@ def write_cache(key: str, payload: dict) -> None:
         cache_client.setex(key, CACHE_TTL_SECONDS, json.dumps(payload))
     except Exception:
         return
+
+
+def _parse_utc_iso(value: str) -> Optional[datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        return datetime.fromisoformat(value).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _format_utc_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _cache_setex(key: str, ttl_seconds: int, value: str) -> None:
+    if ttl_seconds <= 0:
+        ttl_seconds = 1
+    try:
+        if hasattr(cache_client, "setex"):
+            cache_client.setex(key, ttl_seconds, value)
+            return
+        cache_client.set(key, value, ex=ttl_seconds)
+    except Exception:
+        return
+
+
+def _read_scan_cache_entry(key: str) -> tuple[Optional[dict], Optional[dict]]:
+    """
+    Returns (payload, cache_info_for_response) where payload is the scanner response body (without cache info).
+    """
+    try:
+        raw = cache_client.get(key)
+    except Exception:
+        return None, None
+
+    if not raw:
+        return None, None
+
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, None
+
+    # Back-compat: older versions cached the payload directly.
+    if isinstance(decoded, dict) and "__cache" not in decoded and "data" not in decoded and "results" in decoded:
+        now = datetime.now(timezone.utc)
+        stored_at = _parse_utc_iso(decoded.get("asOf") or "") or now
+        fresh_until = stored_at + timedelta(seconds=CACHE_TTL_SECONDS)
+        stale_until = stored_at + timedelta(seconds=CACHE_STALE_TTL_SECONDS)
+        cache_info = {
+            "isStale": False,
+            "source": "cache",
+            "fetchedAt": _format_utc_iso(stored_at),
+            "freshUntil": _format_utc_iso(fresh_until),
+            "staleUntil": _format_utc_iso(stale_until),
+            "willRevalidate": False,
+            "retryAfterMs": None,
+        }
+        return decoded, cache_info
+
+    if not isinstance(decoded, dict):
+        return None, None
+
+    envelope = decoded.get("__cache")
+    data = decoded.get("data")
+    if not isinstance(envelope, dict) or not isinstance(data, dict):
+        return None, None
+
+    stored_at = _parse_utc_iso(envelope.get("storedAt") or "")
+    fresh_until = _parse_utc_iso(envelope.get("freshUntil") or "")
+    stale_until = _parse_utc_iso(envelope.get("staleUntil") or "")
+    if stored_at is None or fresh_until is None or stale_until is None:
+        return None, None
+
+    now = datetime.now(timezone.utc)
+    if now > stale_until:
+        return None, None
+
+    is_stale = now > fresh_until
+    will_revalidate = bool(is_stale and SERVE_STALE_WHILE_REVALIDATE)
+    cache_info = {
+        "isStale": bool(is_stale),
+        "source": "cache",
+        "fetchedAt": _format_utc_iso(stored_at),
+        "freshUntil": _format_utc_iso(fresh_until),
+        "staleUntil": _format_utc_iso(stale_until),
+        "willRevalidate": bool(will_revalidate),
+        "retryAfterMs": STALE_RETRY_AFTER_MS if will_revalidate else None,
+    }
+    if is_stale and not SERVE_STALE_WHILE_REVALIDATE:
+        return None, None
+
+    return data, cache_info
+
+
+def _write_scan_cache_entry(key: str, payload: dict) -> dict:
+    stored_at = datetime.now(timezone.utc).replace(microsecond=0)
+    fresh_until = stored_at + timedelta(seconds=CACHE_TTL_SECONDS)
+    stale_until = stored_at + timedelta(seconds=CACHE_STALE_TTL_SECONDS)
+    envelope = {
+        "__cache": {
+            "v": 1,
+            "storedAt": _format_utc_iso(stored_at),
+            "freshUntil": _format_utc_iso(fresh_until),
+            "staleUntil": _format_utc_iso(stale_until),
+        },
+        "data": payload,
+    }
+    _cache_setex(key, CACHE_STALE_TTL_SECONDS, json.dumps(envelope))
+    return {
+        "isStale": False,
+        "source": "yfinance",
+        "fetchedAt": _format_utc_iso(stored_at),
+        "freshUntil": _format_utc_iso(fresh_until),
+        "staleUntil": _format_utc_iso(stale_until),
+        "willRevalidate": False,
+        "retryAfterMs": None,
+    }
+
+
+_revalidate_lock = threading.Lock()
+_revalidate_inflight: set[str] = set()
+
+
+def _schedule_revalidate(cache_key: str, fn) -> None:
+    if not SERVE_STALE_WHILE_REVALIDATE:
+        return
+
+    with _revalidate_lock:
+        if cache_key in _revalidate_inflight:
+            return
+        _revalidate_inflight.add(cache_key)
+
+    def _runner():
+        try:
+            payload = fn()
+            if isinstance(payload, dict):
+                _write_scan_cache_entry(cache_key, payload)
+        finally:
+            with _revalidate_lock:
+                _revalidate_inflight.discard(cache_key)
+
+    threading.Thread(target=_runner, daemon=True).start()
 
 
 ET_TZ = ZoneInfo("America/New_York")
@@ -858,11 +1015,22 @@ class HodVwapApproachRow(BaseModel):
     bar_time: Optional[str] = None
 
 
+class CacheInfo(BaseModel):
+    isStale: bool = False
+    source: str
+    fetchedAt: str
+    freshUntil: str
+    staleUntil: str
+    willRevalidate: bool = False
+    retryAfterMs: Optional[int] = None
+
+
 class DayGainersResponse(BaseModel):
     scanner: str
     asOf: Optional[str] = None
     sorted_by: str
     results: List[DayGainerRow]
+    cache: Optional[CacheInfo] = None
 
 
 class HodVwapMomentumResponse(BaseModel):
@@ -870,6 +1038,7 @@ class HodVwapMomentumResponse(BaseModel):
     asOf: Optional[str] = None
     sorted_by: str
     results: List[IntradayMomentumRow]
+    cache: Optional[CacheInfo] = None
 
 
 class HodVwapApproachResponse(BaseModel):
@@ -877,6 +1046,7 @@ class HodVwapApproachResponse(BaseModel):
     asOf: Optional[str] = None
     sorted_by: str
     results: List[HodVwapApproachRow]
+    cache: Optional[CacheInfo] = None
 
 
 def _validate_intraday_request(request: ScannerUniverseRequest) -> tuple[str, str]:
@@ -1206,13 +1376,23 @@ def _day_gainers_cache_key(request: DayGainersRequest) -> str:
     )
 
 
-@app.post("/scan/day-gainers", response_model=DayGainersResponse)
-def scan_day_gainers(request: DayGainersRequest) -> dict:
-    cache_key = _day_gainers_cache_key(request)
-    cached = read_cache(cache_key)
-    if cached:
-        return cached
+def _serve_scan_cached(cache_key: str, compute_fn) -> dict:
+    cached, cache_info = _read_scan_cache_entry(cache_key)
+    if cached and cache_info:
+        payload = dict(cached)
+        payload["cache"] = cache_info
+        if cache_info.get("willRevalidate"):
+            _schedule_revalidate(cache_key, compute_fn)
+        return payload
 
+    payload = compute_fn()
+    cache_info = _write_scan_cache_entry(cache_key, payload)
+    response = dict(payload)
+    response["cache"] = cache_info
+    return response
+
+
+def _compute_day_gainers_payload(request: DayGainersRequest) -> dict:
     min_price, max_price = _effective_price_bounds(request)
     min_change_ratio = float(request.minChangePct or 0.0) / 100.0
     feature_payload = _get_features_cached(request)
@@ -1265,14 +1445,23 @@ def scan_day_gainers(request: DayGainersRequest) -> dict:
         ),
         reverse=True,
     )
-    payload = {
+    return {
         "scanner": "day_gainers",
         "asOf": feature_payload.get("asOf") or utc_now_iso(),
         "sorted_by": "change_pct desc, relative_volume desc, volume desc",
         "results": results[:SCANNER_RESULTS_LIMIT],
     }
-    write_cache(cache_key, payload)
-    return payload
+
+
+@app.post("/scan/day-gainers", response_model=DayGainersResponse)
+def scan_day_gainers(request: DayGainersRequest) -> dict:
+    cache_key = _day_gainers_cache_key(request)
+    request_snapshot = request.model_dump()
+
+    def _compute():
+        return _compute_day_gainers_payload(DayGainersRequest(**request_snapshot))
+
+    return _serve_scan_cached(cache_key, _compute)
 
 
 @app.post("/scan/hod-vwap-momentum", response_model=HodVwapMomentumResponse, include_in_schema=False)
@@ -1407,18 +1596,7 @@ def scan_hod_vwap_momentum(request: HodVwapMomentumRequest) -> dict:
     return payload
 
 
-@app.post("/scan/hod-breakouts", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
-def scan_hod_breakouts(request: HodBreakoutsRequest) -> dict:
-    cache_key = _scan_cache_key(
-        "hod_breakouts",
-        request,
-        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:"
-        f"maxDistToHod={request.maxDistToHod}:resLimit={SCANNER_RESULTS_LIMIT}",
-    )
-    cached = read_cache(cache_key)
-    if cached:
-        return cached
-
+def _compute_hod_breakouts_payload(request: HodBreakoutsRequest) -> dict:
     momentum_request = HodVwapMomentumRequest(**request.model_dump(), requireHodBreak=True, requireVwapBreak=False)
     payload = scan_hod_vwap_momentum(momentum_request)
     payload["scanner"] = "hod_breakouts"
@@ -1439,21 +1617,26 @@ def scan_hod_breakouts(request: HodBreakoutsRequest) -> dict:
         payload["results"] = results
 
     payload["sorted_by"] = "price_change_pct desc, relative_volume desc"
-    write_cache(cache_key, payload)
     return payload
 
 
-@app.post("/scan/vwap-breakouts", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
-def scan_vwap_breakouts(request: VwapBreakoutsRequest) -> dict:
+@app.post("/scan/hod-breakouts", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
+def scan_hod_breakouts(request: HodBreakoutsRequest) -> dict:
     cache_key = _scan_cache_key(
-        "vwap_breakouts",
+        "hod_breakouts",
         request,
-        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:resLimit={SCANNER_RESULTS_LIMIT}",
+        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:"
+        f"maxDistToHod={request.maxDistToHod}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
-    cached = read_cache(cache_key)
-    if cached:
-        return cached
+    request_snapshot = request.model_dump()
 
+    def _compute():
+        return _compute_hod_breakouts_payload(HodBreakoutsRequest(**request_snapshot))
+
+    return _serve_scan_cached(cache_key, _compute)
+
+
+def _compute_vwap_breakouts_payload(request: VwapBreakoutsRequest) -> dict:
     momentum_request = HodVwapMomentumRequest(
         **request.model_dump(),
         maxDistToHod=0.0,
@@ -1481,21 +1664,25 @@ def scan_vwap_breakouts(request: VwapBreakoutsRequest) -> dict:
         payload["results"] = results
 
     payload["sorted_by"] = "price_change_pct desc, relative_volume desc"
-    write_cache(cache_key, payload)
     return payload
 
 
-@app.post("/scan/volume-spikes", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
-def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
+@app.post("/scan/vwap-breakouts", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
+def scan_vwap_breakouts(request: VwapBreakoutsRequest) -> dict:
     cache_key = _scan_cache_key(
-        "volume_spikes",
+        "vwap_breakouts",
         request,
         f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:resLimit={SCANNER_RESULTS_LIMIT}",
     )
-    cached = read_cache(cache_key)
-    if cached:
-        return cached
+    request_snapshot = request.model_dump()
 
+    def _compute():
+        return _compute_vwap_breakouts_payload(VwapBreakoutsRequest(**request_snapshot))
+
+    return _serve_scan_cached(cache_key, _compute)
+
+
+def _compute_volume_spikes_payload(request: VolumeSpikesRequest) -> dict:
     feature_payload = _get_features_cached(request)
     min_price, max_price = _effective_price_bounds(request)
     min_change_ratio = float(request.minChangePct or 0.0) / 100.0
@@ -1550,14 +1737,27 @@ def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
         ),
         reverse=True,
     )
-    payload = {
+    return {
         "scanner": "volume_spikes",
         "asOf": feature_payload.get("asOf") or utc_now_iso(),
         "sorted_by": "relative_volume desc, price_change_pct desc",
         "results": results[:SCANNER_RESULTS_LIMIT],
     }
-    write_cache(cache_key, payload)
-    return payload
+
+
+@app.post("/scan/volume-spikes", response_model=HodVwapMomentumResponse, response_model_exclude_none=True)
+def scan_volume_spikes(request: VolumeSpikesRequest) -> dict:
+    cache_key = _scan_cache_key(
+        "volume_spikes",
+        request,
+        f"minVol={request.minTodayVolume}:minRelVol={request.minRelVol}:resLimit={SCANNER_RESULTS_LIMIT}",
+    )
+    request_snapshot = request.model_dump()
+
+    def _compute():
+        return _compute_volume_spikes_payload(VolumeSpikesRequest(**request_snapshot))
+
+    return _serve_scan_cached(cache_key, _compute)
 
 
 @app.post("/scan/hod-vwap-approach", response_model=HodVwapApproachResponse, include_in_schema=False)
@@ -1677,20 +1877,7 @@ def scan_hod_vwap_approach(request: HodVwapApproachRequest) -> dict:
     return payload
 
 
-@app.post("/scan/hod-approach", response_model=HodVwapApproachResponse, response_model_exclude_none=True)
-def scan_hod_approach(request: HodApproachRequest) -> dict:
-    cache_key = _scan_cache_key(
-        "hod_approach",
-        request,
-        f"minP={request.minSetupPrice}:maxP={request.maxSetupPrice}:minVol={request.minTodayVolume}:"
-        f"minRange={request.minRangePct}:pos={request.minPosInRange}-{request.maxPosInRange}:"
-        f"maxHod={request.maxDistToHod}:minRelVol={request.minRelVol}:adaptive={int(request.adaptiveThresholds)}:"
-        f"resLimit={SCANNER_RESULTS_LIMIT}",
-    )
-    cached = read_cache(cache_key)
-    if cached:
-        return cached
-
+def _compute_hod_approach_payload(request: HodApproachRequest) -> dict:
     combined_request = HodVwapApproachRequest(**request.model_dump(), maxAbsVwapDistance=0.0)
     payload = scan_hod_vwap_approach(combined_request)
     payload["scanner"] = "hod_approach"
@@ -1711,24 +1898,28 @@ def scan_hod_approach(request: HodApproachRequest) -> dict:
         payload["results"] = results
 
     payload["sorted_by"] = "distance_to_hod asc, relative_volume desc, range_pct desc"
-    write_cache(cache_key, payload)
     return payload
 
 
-@app.post("/scan/vwap-approach", response_model=HodVwapApproachResponse, response_model_exclude_none=True)
-def scan_vwap_approach(request: VwapApproachRequest) -> dict:
+@app.post("/scan/hod-approach", response_model=HodVwapApproachResponse, response_model_exclude_none=True)
+def scan_hod_approach(request: HodApproachRequest) -> dict:
     cache_key = _scan_cache_key(
-        "vwap_approach",
+        "hod_approach",
         request,
         f"minP={request.minSetupPrice}:maxP={request.maxSetupPrice}:minVol={request.minTodayVolume}:"
         f"minRange={request.minRangePct}:pos={request.minPosInRange}-{request.maxPosInRange}:"
-        f"maxVwap={request.maxAbsVwapDistance}:minRelVol={request.minRelVol}:adaptive={int(request.adaptiveThresholds)}:"
+        f"maxHod={request.maxDistToHod}:minRelVol={request.minRelVol}:adaptive={int(request.adaptiveThresholds)}:"
         f"resLimit={SCANNER_RESULTS_LIMIT}",
     )
-    cached = read_cache(cache_key)
-    if cached:
-        return cached
+    request_snapshot = request.model_dump()
 
+    def _compute():
+        return _compute_hod_approach_payload(HodApproachRequest(**request_snapshot))
+
+    return _serve_scan_cached(cache_key, _compute)
+
+
+def _compute_vwap_approach_payload(request: VwapApproachRequest) -> dict:
     combined_request = HodVwapApproachRequest(
         **request.model_dump(),
         maxDistToHod=0.0,
@@ -1752,5 +1943,22 @@ def scan_vwap_approach(request: VwapApproachRequest) -> dict:
         payload["results"] = results
 
     payload["sorted_by"] = "abs(vwap_distance) asc, relative_volume desc, range_pct desc"
-    write_cache(cache_key, payload)
     return payload
+
+
+@app.post("/scan/vwap-approach", response_model=HodVwapApproachResponse, response_model_exclude_none=True)
+def scan_vwap_approach(request: VwapApproachRequest) -> dict:
+    cache_key = _scan_cache_key(
+        "vwap_approach",
+        request,
+        f"minP={request.minSetupPrice}:maxP={request.maxSetupPrice}:minVol={request.minTodayVolume}:"
+        f"minRange={request.minRangePct}:pos={request.minPosInRange}-{request.maxPosInRange}:"
+        f"maxVwap={request.maxAbsVwapDistance}:minRelVol={request.minRelVol}:adaptive={int(request.adaptiveThresholds)}:"
+        f"resLimit={SCANNER_RESULTS_LIMIT}",
+    )
+    request_snapshot = request.model_dump()
+
+    def _compute():
+        return _compute_vwap_approach_payload(VwapApproachRequest(**request_snapshot))
+
+    return _serve_scan_cached(cache_key, _compute)

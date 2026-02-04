@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -239,14 +240,35 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     return Number.isFinite(parsed) ? parsed : null
   }, [query.data?.asOf])
 
+  const cacheFreshUntilMs = useMemo(() => {
+    const raw = query.data?.cache?.freshUntil
+    if (typeof raw !== 'string') return null
+    const parsed = Date.parse(raw)
+    return Number.isFinite(parsed) ? parsed : null
+  }, [query.data?.cache?.freshUntil])
+
+  const isStale = query.data?.cache?.isStale === true
+  const willRevalidate = query.data?.cache?.willRevalidate === true
+  const retryAfterMs = Math.max(500, query.data?.cache?.retryAfterMs ?? 5000)
+
   useEffect(() => {
     if (!isDocumentVisible) return
     if (query.isFetching) return
 
+    if (isStale && willRevalidate) {
+      const timeout = window.setTimeout(() => {
+        if (document.visibilityState !== 'hidden') {
+          query.refetch()
+        }
+      }, retryAfterMs)
+
+      return () => window.clearTimeout(timeout)
+    }
+
     const baseMs = asOfMs ?? (query.dataUpdatedAt > 0 ? query.dataUpdatedAt : 0)
     if (!baseMs) return
 
-    const expiresAt = baseMs + SCANNER_REFRESH_MS
+    const expiresAt = cacheFreshUntilMs ?? baseMs + SCANNER_REFRESH_MS
     const delayMs = expiresAt - Date.now()
 
     if (!Number.isFinite(delayMs)) return
@@ -264,10 +286,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     return () => window.clearTimeout(timeout)
   }, [
     asOfMs,
+    cacheFreshUntilMs,
+    isStale,
     isDocumentVisible,
     query.dataUpdatedAt,
     query.isFetching,
     query.refetch,
+    retryAfterMs,
+    willRevalidate,
   ])
 
   const rows = useMemo(
@@ -554,6 +580,17 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                             ).toLocaleTimeString()}
                           </span>
                         </span>
+                      )}
+                      {isStale && (
+                        <div
+                          title="Stale data (showing cached results)"
+                          className="flex items-center"
+                        >
+                          <AlertTriangle
+                            className="h-3.5 w-3.5 text-amber-600"
+                            aria-label="Stale data"
+                          />
+                        </div>
                       )}
                     </div>
                     <Button

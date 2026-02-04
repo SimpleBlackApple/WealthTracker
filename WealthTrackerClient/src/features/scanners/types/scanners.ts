@@ -126,11 +126,22 @@ export type HodVwapApproachRow = {
   relative_volume?: number | null
 }
 
+export type CacheInfo = {
+  isStale: boolean
+  source: string
+  fetchedAt: string
+  freshUntil: string
+  staleUntil: string
+  willRevalidate: boolean
+  retryAfterMs?: number | null
+}
+
 export type ScannerResponse<TRow> = {
   scanner: string
   asOf?: string
   sorted_by: string
   results: TRow[]
+  cache?: CacheInfo | null
 }
 
 export type ScannerResponseById = {

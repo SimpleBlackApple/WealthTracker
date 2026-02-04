@@ -135,6 +135,9 @@ Optional (only if you use Upstash REST mode):
 Optional:
 
 - `CACHE_TTL_SECONDS` (default is 300)
+- `CACHE_STALE_TTL_SECONDS` (default is `max(CACHE_TTL_SECONDS*12, 86400)`): keep old scan results longer (stale-while-revalidate). For 1-day retention set `86400`.
+- `SERVE_STALE_WHILE_REVALIDATE` (default is 1): serve stale data immediately and refresh cache in the background.
+- `STALE_RETRY_AFTER_MS` (default is 5000): suggested client retry delay when stale data is served.
 
 ### Google OAuth
 
@@ -382,7 +385,41 @@ Recommended fixes:
 - Increase API -> market-data timeout in Container Apps:
   - Set `MarketDataService__TimeoutSeconds=60` on `wealthtracker-api` (the GitHub Actions workflow sets this).
 - Keep `CACHE_TTL_SECONDS=300` so most scans are served from Redis cache.
+- If cold-start latency is still painful, set `CACHE_STALE_TTL_SECONDS` (for example, `86400`) so the UI can render stale results immediately while the cache revalidates.
 - If you want consistently low latency (higher cost), set `minReplicas=1` for `wealthtracker-market-data`.
+
+### (7a) Daily warmup job (optional)
+
+If you want to ensure there is always up-to-1-day-old cached scanner data (even if nobody opens the app), schedule a daily “warmup” that calls the scanner endpoints once.
+
+Option A (recommended): **Azure Container Apps Job (Schedule trigger)** in the same Container Apps environment.
+
+- Scheduled job cron is evaluated in **UTC**.
+- The simplest warmup is to POST `{}` (defaults) to each scanner endpoint.
+
+Example (Azure CLI):
+
+```bash
+# Runs every day at 00:05 UTC
+az containerapp job create \
+  --name "wealthtracker-warmup" \
+  --resource-group "$RESOURCE_GROUP" \
+  --environment "$CONTAINERAPPS_ENV" \
+  --trigger-type "Schedule" \
+  --cron-expression "5 0 * * *" \
+  --replica-timeout 1800 \
+  --image "curlimages/curl:8.5.0" \
+  --cpu "0.25" --memory "0.5Gi" \
+  --command "/bin/sh" \
+  --args "-lc" 'set -e; \
+    API="https://YOUR_API_FQDN/api"; \
+    for p in scanner/day-gainers scanner/hod-breakouts scanner/vwap-breakouts scanner/volume-spikes scanner/hod-approach scanner/vwap-approach; do \
+      echo "Warming $p"; \
+      curl -fsS -X POST "$API/$p" -H "Content-Type: application/json" -d "{}" >/dev/null; \
+    done'
+```
+
+Option B: **Azure Functions (Timer trigger)** or **Logic Apps (Recurrence)** calling the same endpoints over HTTPS.
 
 ### (8) Google OAuth redirect URI issues
 
