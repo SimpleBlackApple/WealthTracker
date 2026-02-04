@@ -137,7 +137,7 @@ Optional:
 - `CACHE_TTL_SECONDS` (default is 300)
 - `CACHE_STALE_TTL_SECONDS` (default is `max(CACHE_TTL_SECONDS*12, 86400)`): keep old scan results longer (stale-while-revalidate). For 1-day retention set `86400`.
 - `SERVE_STALE_WHILE_REVALIDATE` (default is 1): serve stale data immediately and refresh cache in the background.
-- `STALE_RETRY_AFTER_MS` (default is 5000): suggested client retry delay when stale data is served.
+- `STALE_RETRY_AFTER_MS` (default is 15000): suggested client retry delay when stale data is served.
 
 ### Google OAuth
 
@@ -392,6 +392,8 @@ Recommended fixes:
 
 If you want to ensure there is always up-to-1-day-old cached scanner data (even if nobody opens the app), schedule a daily “warmup” that calls the scanner endpoints once.
 
+Note: the CD workflow (`.github/workflows/cd.yml`) now creates/updates a `wealthtracker-warmup` Container Apps Job automatically.
+
 Option A (recommended): **Azure Container Apps Job (Schedule trigger)** in the same Container Apps environment.
 
 - Scheduled job cron is evaluated in **UTC**.
@@ -411,7 +413,7 @@ az containerapp job create \
   --image "curlimages/curl:8.5.0" \
   --cpu "0.25" --memory "0.5Gi" \
   --command "/bin/sh" \
-  --args "-lc" 'set -e; \
+  --args "-lc" 'set -eu; \
     API="https://YOUR_API_FQDN/api"; \
     for p in scanner/day-gainers scanner/hod-breakouts scanner/vwap-breakouts scanner/volume-spikes scanner/hod-approach scanner/vwap-approach; do \
       echo "Warming $p"; \

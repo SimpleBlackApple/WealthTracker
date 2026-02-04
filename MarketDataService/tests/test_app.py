@@ -116,9 +116,11 @@ class TestScannerWrappers(unittest.TestCase):
         }
         request = app.HodBreakoutsRequest()
 
-        with mock.patch.object(app, "read_cache", return_value=None), mock.patch.object(
-            app, "write_cache"
-        ), mock.patch.object(app, "scan_hod_vwap_momentum", return_value=payload):
+        with mock.patch.object(
+            app, "_read_scan_cache_entry", return_value=(None, None)
+        ), mock.patch.object(app, "_write_scan_cache_entry", return_value={}), mock.patch.object(
+            app, "scan_hod_vwap_momentum", return_value=payload
+        ):
             result = app.scan_hod_breakouts(request)
 
         self.assertEqual(result["scanner"], "hod_breakouts")

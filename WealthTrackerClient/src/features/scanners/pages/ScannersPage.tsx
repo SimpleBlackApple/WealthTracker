@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -61,6 +61,9 @@ const SCANNER_REFRESH_MS = Math.max(
   1,
   Math.trunc(getRuntimeConfig().scannerRefreshSeconds * 1000)
 )
+
+const STALE_REVALIDATE_REFETCH_MS = 15_000
+const STALE_REVALIDATE_GIVE_UP_MS = 60_000
 
 function useIsDocumentVisible() {
   const [isVisible, setIsVisible] = useState(() => {
@@ -222,6 +225,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   } | null>(null)
   const [isPanelVisible, setIsPanelVisible] = useState(true)
 
+  const [staleRevalidateStartedAtMs, setStaleRevalidateStartedAtMs] = useState<
+    number | null
+  >(null)
+  const [staleRevalidateTimedOut, setStaleRevalidateTimedOut] = useState(false)
+
+  const staleRevalidateGiveUpTimeoutIdRef = useRef<number | null>(null)
+  const staleRevalidateRefetchTimeoutIdRef = useRef<number | null>(null)
+
   const query = useQuery({
     queryKey: ['scanner', definition.id, appliedRequest],
     queryFn: async () =>
@@ -232,6 +243,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     staleTime: SCANNER_REFRESH_MS,
     refetchOnWindowFocus: true,
   })
+  const { dataUpdatedAt, isFetching, refetch } = query
 
   const asOfMs = useMemo(() => {
     const raw = query.data?.asOf
@@ -249,23 +261,140 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
   const isStale = query.data?.cache?.isStale === true
   const willRevalidate = query.data?.cache?.willRevalidate === true
-  const retryAfterMs = Math.max(500, query.data?.cache?.retryAfterMs ?? 5000)
+
+  const isAutoRevalidating =
+    isStale &&
+    willRevalidate &&
+    isDocumentVisible &&
+    staleRevalidateStartedAtMs !== null &&
+    !staleRevalidateTimedOut
+
+  useEffect(() => {
+    if (staleRevalidateGiveUpTimeoutIdRef.current !== null) {
+      window.clearTimeout(staleRevalidateGiveUpTimeoutIdRef.current)
+      staleRevalidateGiveUpTimeoutIdRef.current = null
+    }
+
+    if (staleRevalidateRefetchTimeoutIdRef.current !== null) {
+      window.clearTimeout(staleRevalidateRefetchTimeoutIdRef.current)
+      staleRevalidateRefetchTimeoutIdRef.current = null
+    }
+
+    queueMicrotask(() => {
+      setStaleRevalidateStartedAtMs(null)
+      setStaleRevalidateTimedOut(false)
+    })
+  }, [definition.id, appliedRequest])
+
+  useEffect(() => {
+    const shouldReset = !isStale || !willRevalidate || !isDocumentVisible
+    if (shouldReset) {
+      if (staleRevalidateGiveUpTimeoutIdRef.current !== null) {
+        window.clearTimeout(staleRevalidateGiveUpTimeoutIdRef.current)
+        staleRevalidateGiveUpTimeoutIdRef.current = null
+      }
+
+      if (staleRevalidateRefetchTimeoutIdRef.current !== null) {
+        window.clearTimeout(staleRevalidateRefetchTimeoutIdRef.current)
+        staleRevalidateRefetchTimeoutIdRef.current = null
+      }
+
+      if (staleRevalidateStartedAtMs !== null || staleRevalidateTimedOut) {
+        queueMicrotask(() => {
+          setStaleRevalidateStartedAtMs(null)
+          setStaleRevalidateTimedOut(false)
+        })
+      }
+
+      return
+    }
+
+    if (!staleRevalidateTimedOut && staleRevalidateStartedAtMs === null) {
+      queueMicrotask(() => setStaleRevalidateStartedAtMs(Date.now()))
+    }
+  }, [
+    isStale,
+    isDocumentVisible,
+    staleRevalidateStartedAtMs,
+    staleRevalidateTimedOut,
+    willRevalidate,
+  ])
+
+  useEffect(() => {
+    if (!isStale || !willRevalidate || !isDocumentVisible) return
+    if (staleRevalidateTimedOut) return
+    if (staleRevalidateStartedAtMs === null) return
+    if (staleRevalidateGiveUpTimeoutIdRef.current !== null) return
+
+    const remainingMs = Math.max(
+      0,
+      staleRevalidateStartedAtMs + STALE_REVALIDATE_GIVE_UP_MS - Date.now()
+    )
+    if (remainingMs <= 0) return
+
+    staleRevalidateGiveUpTimeoutIdRef.current = window.setTimeout(() => {
+      staleRevalidateGiveUpTimeoutIdRef.current = null
+      setStaleRevalidateTimedOut(true)
+    }, remainingMs)
+
+    return () => {
+      if (staleRevalidateGiveUpTimeoutIdRef.current !== null) {
+        window.clearTimeout(staleRevalidateGiveUpTimeoutIdRef.current)
+        staleRevalidateGiveUpTimeoutIdRef.current = null
+      }
+    }
+  }, [
+    isStale,
+    isDocumentVisible,
+    staleRevalidateStartedAtMs,
+    staleRevalidateTimedOut,
+    willRevalidate,
+  ])
+
+  useEffect(() => {
+    if (!isStale || !willRevalidate || !isDocumentVisible) return
+    if (staleRevalidateTimedOut) return
+    if (staleRevalidateStartedAtMs === null) return
+    if (isFetching) return
+    if (staleRevalidateRefetchTimeoutIdRef.current !== null) return
+
+    const remainingMs = Math.max(
+      0,
+      staleRevalidateStartedAtMs + STALE_REVALIDATE_GIVE_UP_MS - Date.now()
+    )
+    if (remainingMs <= 0) return
+
+    const delayMs = Math.min(STALE_REVALIDATE_REFETCH_MS, remainingMs)
+    staleRevalidateRefetchTimeoutIdRef.current = window.setTimeout(() => {
+      staleRevalidateRefetchTimeoutIdRef.current = null
+      if (document.visibilityState !== 'hidden') {
+        refetch()
+      }
+    }, delayMs)
+
+    return () => {
+      if (staleRevalidateRefetchTimeoutIdRef.current !== null) {
+        window.clearTimeout(staleRevalidateRefetchTimeoutIdRef.current)
+        staleRevalidateRefetchTimeoutIdRef.current = null
+      }
+    }
+  }, [
+    isStale,
+    isDocumentVisible,
+    isFetching,
+    refetch,
+    staleRevalidateStartedAtMs,
+    staleRevalidateTimedOut,
+    willRevalidate,
+  ])
 
   useEffect(() => {
     if (!isDocumentVisible) return
-    if (query.isFetching) return
+    if (isFetching) return
 
-    if (isStale && willRevalidate) {
-      const timeout = window.setTimeout(() => {
-        if (document.visibilityState !== 'hidden') {
-          query.refetch()
-        }
-      }, retryAfterMs)
+    if (isStale) return
 
-      return () => window.clearTimeout(timeout)
-    }
-
-    const baseMs = asOfMs ?? (query.dataUpdatedAt > 0 ? query.dataUpdatedAt : 0)
+    const baseMs = asOfMs ?? (dataUpdatedAt > 0 ? dataUpdatedAt : 0)
     if (!baseMs) return
 
     const expiresAt = cacheFreshUntilMs ?? baseMs + SCANNER_REFRESH_MS
@@ -273,13 +402,13 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
     if (!Number.isFinite(delayMs)) return
     if (delayMs <= 0) {
-      query.refetch()
+      refetch()
       return
     }
 
     const timeout = window.setTimeout(() => {
       if (document.visibilityState !== 'hidden') {
-        query.refetch()
+        refetch()
       }
     }, delayMs + 100)
 
@@ -289,11 +418,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     cacheFreshUntilMs,
     isStale,
     isDocumentVisible,
-    query.dataUpdatedAt,
-    query.isFetching,
-    query.refetch,
-    retryAfterMs,
-    willRevalidate,
+    dataUpdatedAt,
+    isFetching,
+    refetch,
   ])
 
   const rows = useMemo(
@@ -610,13 +737,38 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       variant="outline"
                       size="sm"
                       className="h-8 w-8 p-0"
-                      onClick={() => query.refetch()}
+                      onClick={() => {
+                        if (
+                          staleRevalidateGiveUpTimeoutIdRef.current !== null
+                        ) {
+                          window.clearTimeout(
+                            staleRevalidateGiveUpTimeoutIdRef.current
+                          )
+                          staleRevalidateGiveUpTimeoutIdRef.current = null
+                        }
+
+                        if (
+                          staleRevalidateRefetchTimeoutIdRef.current !== null
+                        ) {
+                          window.clearTimeout(
+                            staleRevalidateRefetchTimeoutIdRef.current
+                          )
+                          staleRevalidateRefetchTimeoutIdRef.current = null
+                        }
+
+                        setStaleRevalidateTimedOut(false)
+                        setStaleRevalidateStartedAtMs(
+                          isStale && willRevalidate ? Date.now() : null
+                        )
+                        query.refetch()
+                      }}
                       disabled={query.isFetching}
                     >
                       <RefreshCw
                         className={cn(
                           'h-3.5 w-3.5',
-                          query.isFetching && 'animate-spin'
+                          (query.isFetching || isAutoRevalidating) &&
+                            'animate-spin'
                         )}
                       />
                     </Button>
