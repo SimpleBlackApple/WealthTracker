@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using WealthTrackerServer.Models;
+using WealthTrackerServer.Models.MarketData;
 using WealthTrackerServer.Services;
 
 namespace WealthTrackerServer.Tests;
@@ -39,6 +41,39 @@ public class SimulationTradingServiceTests
     return TimeZoneInfo.ConvertTimeToUtc(startOfDayEastern, tz);
   }
 
+  private static Mock<IMarketDataClient> CreateMarketDataClientMock(
+    Dictionary<string, double?>? quotesBySymbol = null)
+  {
+    var mock = new Mock<IMarketDataClient>(MockBehavior.Strict);
+
+    mock
+      .Setup(m => m.GetQuotesAsync(It.IsAny<QuotesRequest>(), It.IsAny<CancellationToken>()))
+      .ReturnsAsync((QuotesRequest request, CancellationToken _) =>
+      {
+        var results = (request.Tickers ?? [])
+          .Select(t =>
+          {
+            var symbol = (t ?? string.Empty).Trim().ToUpperInvariant();
+            double? price = null;
+            if (quotesBySymbol != null && quotesBySymbol.TryGetValue(symbol, out var p))
+            {
+              price = p;
+            }
+
+            return new QuoteRow { Symbol = symbol, Price = price };
+          })
+          .ToList();
+
+        return new QuotesResponse
+        {
+          AsOf = DateTimeOffset.UtcNow,
+          Results = results
+        };
+      });
+
+    return mock;
+  }
+
   [Fact]
   public async Task GetUserPortfoliosAsync_CreatesDefaultPortfolio_WhenNoneExist()
   {
@@ -52,7 +87,8 @@ public class SimulationTradingServiceTests
     });
     await context.SaveChangesAsync();
 
-    var service = new SimulationTradingService(context);
+    var marketData = CreateMarketDataClientMock();
+    var service = new SimulationTradingService(context, marketData.Object);
     var portfolios = await service.GetUserPortfoliosAsync(1);
 
     Assert.Single(portfolios);
@@ -86,7 +122,8 @@ public class SimulationTradingServiceTests
     context.SimulationPortfolios.Add(portfolio);
     await context.SaveChangesAsync();
 
-    var service = new SimulationTradingService(context);
+    var marketData = CreateMarketDataClientMock();
+    var service = new SimulationTradingService(context, marketData.Object);
 
     var buy = await service.ExecuteTradeAsync(
       portfolio.Id,
@@ -196,10 +233,61 @@ public class SimulationTradingServiceTests
 
     await context.SaveChangesAsync();
 
-    var service = new SimulationTradingService(context);
+    var marketData = CreateMarketDataClientMock();
+    var service = new SimulationTradingService(context, marketData.Object);
     var summary = await service.GetPortfolioSummaryAsync(portfolio.Id, 1);
 
     Assert.Equal(-2m, summary.TodayRealizedPL);
+  }
+
+  [Fact]
+  public async Task GetPortfolioSummaryAsync_RefreshesPrices_FromQuotes_ForUnrealizedPL()
+  {
+    using var context = CreateContext();
+    context.Users.Add(new User
+    {
+      Id = 1,
+      Name = "Test User",
+      Email = "test@example.com",
+      CreatedAt = DateTime.UtcNow
+    });
+    await context.SaveChangesAsync();
+
+    var portfolio = new SimulationPortfolio
+    {
+      UserId = 1,
+      Name = "Test",
+      InitialCash = 10_000m,
+      CurrentCash = 10_000m,
+      CreatedAt = DateTime.UtcNow,
+      FeeSettingsJson = FeeSettingsSerializer.Serialize(new FeeSettings { Mode = FeeMode.ZeroFees })
+    };
+    context.SimulationPortfolios.Add(portfolio);
+    await context.SaveChangesAsync();
+
+    var marketData = CreateMarketDataClientMock(new Dictionary<string, double?>
+    {
+      ["AAPL"] = 105.0
+    });
+    var service = new SimulationTradingService(context, marketData.Object);
+
+    await service.ExecuteTradeAsync(
+      portfolio.Id,
+      1,
+      "AAPL",
+      "NASDAQ",
+      TransactionType.Buy,
+      quantity: 10,
+      price: 100m,
+      orderType: OrderType.Market);
+
+    var summary = await service.GetPortfolioSummaryAsync(portfolio.Id, 1);
+
+    Assert.Single(summary.Positions);
+    var pos = summary.Positions.Single();
+    Assert.Equal(105m, pos.CurrentPrice);
+    Assert.Equal(50m, pos.UnrealizedPL);
+    Assert.Equal(50m, summary.TotalPL);
   }
 
   [Fact]
@@ -236,7 +324,8 @@ public class SimulationTradingServiceTests
     context.SimulationPortfolios.Add(portfolio);
     await context.SaveChangesAsync();
 
-    var service = new SimulationTradingService(context);
+    var marketData = CreateMarketDataClientMock();
+    var service = new SimulationTradingService(context, marketData.Object);
 
     await service.ExecuteTradeAsync(
       portfolio.Id,
@@ -294,7 +383,8 @@ public class SimulationTradingServiceTests
     context.SimulationPortfolios.Add(portfolio);
     await context.SaveChangesAsync();
 
-    var service = new SimulationTradingService(context);
+    var marketData = CreateMarketDataClientMock();
+    var service = new SimulationTradingService(context, marketData.Object);
 
     var pending = await service.ExecuteTradeAsync(
       portfolio.Id,

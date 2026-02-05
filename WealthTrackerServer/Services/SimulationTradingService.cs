@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WealthTrackerServer.Models.MarketData;
 using WealthTrackerServer.Models;
 
 namespace WealthTrackerServer.Services;
@@ -6,12 +7,20 @@ namespace WealthTrackerServer.Services;
 public class SimulationTradingService : ISimulationTradingService
 {
   private readonly ApplicationDbContext _context;
+  private readonly IMarketDataClient _marketDataClient;
   private readonly SimulationFeeCalculator _feeCalculator;
   private static readonly TimeZoneInfo EasternTimeZone = GetEasternTimeZone();
+  private static readonly TimeSpan PriceRefreshInterval = TimeSpan.FromMinutes(5);
+  private const string QuoteInterval = "5m";
+  private const string QuotePeriod = "1d";
+  private const bool QuotePrepost = false;
 
-  public SimulationTradingService(ApplicationDbContext context)
+  public SimulationTradingService(
+    ApplicationDbContext context,
+    IMarketDataClient marketDataClient)
   {
     _context = context;
+    _marketDataClient = marketDataClient;
     _feeCalculator = new SimulationFeeCalculator();
   }
 
@@ -269,7 +278,10 @@ public class SimulationTradingService : ISimulationTradingService
     return true;
   }
 
-  public async Task<PortfolioSummary> GetPortfolioSummaryAsync(int portfolioId, int userId)
+  public async Task<PortfolioSummary> GetPortfolioSummaryAsync(
+    int portfolioId,
+    int userId,
+    bool refreshMarketPrices = true)
   {
     var portfolio = await _context.SimulationPortfolios
       .Include(p => p.Positions)
@@ -278,7 +290,13 @@ public class SimulationTradingService : ISimulationTradingService
     if (portfolio == null)
       throw new InvalidOperationException("Portfolio not found");
 
-    AccrueBorrowCosts(portfolio, DateTime.UtcNow);
+    var utcNow = DateTime.UtcNow;
+    if (refreshMarketPrices)
+    {
+      await RefreshPositionPricesIfStaleAsync(portfolio.Positions, utcNow);
+    }
+
+    AccrueBorrowCosts(portfolio, utcNow);
     await _context.SaveChangesAsync();
 
     var summary = new PortfolioSummary
@@ -286,7 +304,6 @@ public class SimulationTradingService : ISimulationTradingService
       Cash = portfolio.CurrentCash
     };
 
-    var utcNow = DateTime.UtcNow;
     var startOfDayUtc = GetStartOfDayUtcInEastern(utcNow);
 
     summary.TodayRealizedPL = await _context.SimulationTransactions
@@ -351,6 +368,66 @@ public class SimulationTradingService : ISimulationTradingService
       portfolio.InitialCash == 0m ? 0m : summary.TotalPL / portfolio.InitialCash;
 
     return summary;
+  }
+
+  private async Task RefreshPositionPricesIfStaleAsync(
+    IEnumerable<SimulationPosition> positions,
+    DateTime utcNow)
+  {
+    var positionList = positions.ToList();
+    if (positionList.Count == 0) return;
+
+    var shouldRefresh = positionList.Any(p =>
+      p.CurrentPrice == null ||
+      p.LastPriceUpdate == null ||
+      p.LastPriceUpdate.Value == p.UpdatedAt ||
+      (utcNow - p.LastPriceUpdate.Value) > PriceRefreshInterval);
+
+    if (!shouldRefresh) return;
+
+    var tickers = positionList
+      .Select(p => (p.Symbol ?? string.Empty).Trim().ToUpperInvariant())
+      .Where(s => !string.IsNullOrWhiteSpace(s))
+      .Distinct()
+      .ToList();
+
+    if (tickers.Count == 0) return;
+
+    try
+    {
+      var quotes = await _marketDataClient.GetQuotesAsync(
+        new QuotesRequest
+        {
+          Tickers = tickers,
+          Interval = QuoteInterval,
+          Period = QuotePeriod,
+          Prepost = QuotePrepost
+        },
+        CancellationToken.None);
+
+      var asOfUtc = quotes.AsOf?.UtcDateTime ?? utcNow;
+
+      var quotesBySymbol = (quotes.Results ?? [])
+        .Where(r => !string.IsNullOrWhiteSpace(r.Symbol))
+        .GroupBy(r => r.Symbol.Trim().ToUpperInvariant())
+        .ToDictionary(g => g.Key, g => g.FirstOrDefault()?.Price);
+
+      foreach (var pos in positionList)
+      {
+        var symbol = (pos.Symbol ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(symbol)) continue;
+        if (!quotesBySymbol.TryGetValue(symbol, out var price)) continue;
+        if (price is null) continue;
+        if (double.IsNaN(price.Value) || double.IsInfinity(price.Value)) continue;
+
+        pos.CurrentPrice = (decimal)price.Value;
+        pos.LastPriceUpdate = asOfUtc;
+      }
+    }
+    catch (HttpRequestException)
+    {
+      // Market data service temporarily unavailable; fall back to last known price.
+    }
   }
 
   private static TimeZoneInfo GetEasternTimeZone()
