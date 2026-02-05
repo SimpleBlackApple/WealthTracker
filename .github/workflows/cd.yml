@@ -308,7 +308,9 @@ jobs:
           ENV_VARS=(
             "PORT=5141"
             "GIT_SHA=$GITHUB_SHA"
-            "MIGRATE_ON_STARTUP=0"
+            # Apply EF Core migrations on container startup to avoid schema drift on deploy.
+            # Keep API replicas at 1 to reduce the chance of concurrent migration runs.
+            "MIGRATE_ON_STARTUP=1"
             "FrontendUrl=https://example.com"
             "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
             "MarketDataService__TimeoutSeconds=60"
