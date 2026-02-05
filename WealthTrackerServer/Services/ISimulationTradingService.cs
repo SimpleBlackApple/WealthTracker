@@ -35,7 +35,10 @@ public interface ISimulationTradingService
 
   Task<bool> CancelOrderAsync(int orderId, int userId);
 
-  Task<PortfolioSummary> GetPortfolioSummaryAsync(int portfolioId, int userId);
+  Task<PortfolioSummary> GetPortfolioSummaryAsync(
+    int portfolioId,
+    int userId,
+    bool refreshMarketPrices = true);
 }
 
 public class PortfolioSummary
