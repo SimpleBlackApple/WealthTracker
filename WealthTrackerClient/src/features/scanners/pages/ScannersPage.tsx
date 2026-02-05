@@ -44,18 +44,19 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TableSkeleton } from '@/features/scanners/components/TableSkeleton'
 import { TradingViewChart } from '@/features/scanners/components/TradingViewChart'
 import { TradingPanel } from '@/features/trading/components/TradingPanel'
+import { useTradingContext } from '@/features/trading/contexts/TradingContext'
+import { usePortfolios } from '@/features/trading/hooks/usePortfolios'
 import { scannerService } from '@/features/scanners/services/scannerService'
 import { getRuntimeConfig } from '@/config/runtimeConfig'
 import {
   SCANNERS,
   type ScannerId,
-  type ScannerDefinition,
   type ScannerRequestById,
   type SortDirection,
 } from '@/features/scanners/types/scanners'
 
 type SortState = { key: string; direction: SortDirection }
-type Scanner = ScannerDefinition<ScannerId>
+type Scanner = (typeof SCANNERS)[number]
 
 const SCANNER_REFRESH_MS = Math.max(
   1,
@@ -97,6 +98,23 @@ function formatPrice(value: number | null | undefined) {
     currency: 'USD',
     maximumFractionDigits: value >= 10 ? 2 : 4,
   })
+}
+
+function formatPL(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-'
+  const color =
+    value > 0
+      ? 'text-gain font-semibold'
+      : value < 0
+        ? 'text-loss font-semibold'
+        : ''
+
+  return (
+    <span className={color}>
+      {value > 0 ? '+' : value < 0 ? '-' : ''}
+      {formatPrice(Math.abs(value))}
+    </span>
+  )
 }
 
 function formatCompact(value: number | null | undefined) {
@@ -207,6 +225,13 @@ export function ScannersPage() {
 }
 
 function ScannersPageInner({ definition }: { definition: Scanner }) {
+  const isHoldings = definition.id === 'holdings'
+  const { activePortfolioId } = useTradingContext()
+  const portfoliosQuery = usePortfolios()
+  const portfolios = portfoliosQuery.data ?? []
+  const resolvedPortfolioId =
+    activePortfolioId ?? (portfolios.length > 0 ? portfolios[0].id : null)
+
   const [draftRequest, setDraftRequest] = useState<
     ScannerRequestById[ScannerId]
   >(definition.defaultRequest)
@@ -215,6 +240,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   >(definition.defaultRequest)
 
   const isDocumentVisible = useIsDocumentVisible()
+
+  const effectiveAppliedRequest = useMemo(() => {
+    if (!isHoldings) return appliedRequest
+    return {
+      ...(appliedRequest as ScannerRequestById['holdings']),
+      portfolioId: resolvedPortfolioId,
+    } satisfies ScannerRequestById['holdings']
+  }, [appliedRequest, isHoldings, resolvedPortfolioId])
 
   const [sort, setSort] = useState<SortState>(definition.defaultSort)
   const [pageIndex, setPageIndex] = useState(0)
@@ -234,14 +267,15 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   const staleRevalidateRefetchTimeoutIdRef = useRef<number | null>(null)
 
   const query = useQuery({
-    queryKey: ['scanner', definition.id, appliedRequest],
+    queryKey: ['scanner', definition.id, effectiveAppliedRequest],
     queryFn: async () =>
       scannerService.runScanner(
         definition.id,
-        appliedRequest as ScannerRequestById[typeof definition.id]
+        effectiveAppliedRequest as ScannerRequestById[typeof definition.id]
       ),
     staleTime: SCANNER_REFRESH_MS,
     refetchOnWindowFocus: true,
+    enabled: !isHoldings || resolvedPortfolioId !== null,
   })
   const { dataUpdatedAt, isFetching, refetch } = query
 
@@ -496,6 +530,8 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
   const effectiveSelectedSymbol = selectedSymbol ?? defaultSelectedSymbol
 
   const appliedFilters = useMemo(() => {
+    if (isHoldings) return []
+
     const filters = [
       {
         key: 'minPrice',
@@ -542,7 +578,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     }
 
     return filters
-  }, [appliedRequest, definition])
+  }, [appliedRequest, definition, isHoldings])
 
   const appliedFilterCount = appliedFilters.filter(
     filter => filter.value !== filter.defaultValue
@@ -569,6 +605,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
     if (key === 'price' || key === 'prev_close' || key === 'day_high') {
       return formatPrice(value as number | null | undefined)
+    }
+
+    if (key === 'avg_cost') {
+      return formatPrice(value as number | null | undefined)
+    }
+
+    if (key.endsWith('_pl')) {
+      return formatPL(value as number | null | undefined)
     }
 
     if (
@@ -657,7 +701,14 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                       )}
                     />
                     <div className="flex flex-col gap-0.5 min-w-0">
-                      <div className="leading-tight truncate">{s.title}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="leading-tight truncate">{s.title}</div>
+                        {s.id === 'holdings' && (
+                          <span className="shrink-0 rounded-full border border-border/70 bg-card px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                            Watchlist
+                          </span>
+                        )}
+                      </div>
                       <div className="line-clamp-2 text-[11px] text-muted-foreground/70 font-normal leading-normal">
                         {s.description}
                       </div>
@@ -725,13 +776,20 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                         setPageIndex(0)
                         setSelectedSymbol(null)
                         setIsPanelVisible(true)
+                        if (isHoldings) {
+                          refetch()
+                          return
+                        }
                         setAppliedRequest(draftRequest)
                       }}
-                      disabled={query.isFetching}
+                      disabled={
+                        query.isFetching ||
+                        (isHoldings && resolvedPortfolioId === null)
+                      }
                       size="sm"
                       className="h-8 px-4 bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm shadow-primary/20"
                     >
-                      Run
+                      {isHoldings ? 'Refresh' : 'Run'}
                     </Button>
                     <Button
                       variant="outline"
@@ -791,234 +849,120 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="px-4 pb-4 pt-3">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-muted-foreground">
-                      Filters
-                    </span>
-                    <span
-                      className={cn(
-                        'rounded-full border px-2 py-0.5 text-xs font-semibold',
-                        appliedFilterCount > 0
-                          ? 'border-primary/40 bg-primary/10 text-primary'
-                          : 'border-border/70 bg-card text-muted-foreground'
-                      )}
-                    >
-                      {appliedFilterCount}
-                    </span>
+              {isHoldings ? (
+                <CardContent className="px-4 pb-4 pt-3">
+                  <div className="text-[11px] text-muted-foreground">
+                    No filters for Holdings. Use search + sort to triage, then
+                    open the chart/trade panel on the right.
                   </div>
+                </CardContent>
+              ) : (
+                <CardContent className="px-4 pb-4 pt-3">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        Filters
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                          appliedFilterCount > 0
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'border-border/70 bg-card text-muted-foreground'
+                        )}
+                      >
+                        {appliedFilterCount}
+                      </span>
+                    </div>
 
-                  <div className="relative flex-1 min-w-[200px] max-w-2xl">
-                    <div
-                      id="filter-scroll-container"
-                      className="wt-scrollbar-x flex items-center gap-2 overflow-x-auto pb-2 pr-1 md:pb-0"
-                    >
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FilterChip
-                            label="Price"
-                            value={`${draftRequest.minPrice}-${draftRequest.maxPrice}`}
-                            defaultValue={`${definition.defaultRequest.minPrice}-${definition.defaultRequest.maxPrice}`}
-                          />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-56 p-3">
-                          <div className="grid gap-3">
-                            <div className="grid gap-1">
-                              <Label htmlFor="minPrice" className="text-xs">
-                                Min price
-                              </Label>
-                              <Input
-                                id="minPrice"
-                                type="number"
-                                step="0.01"
-                                value={String(draftRequest.minPrice)}
-                                onChange={e =>
-                                  setDraftRequest(prev => ({
-                                    ...prev,
-                                    minPrice: coerceNumber(
-                                      e.target.value,
-                                      prev.minPrice
-                                    ),
-                                  }))
-                                }
-                                className="h-8"
-                              />
-                            </div>
-                            <div className="grid gap-1">
-                              <Label htmlFor="maxPrice" className="text-xs">
-                                Max price
-                              </Label>
-                              <Input
-                                id="maxPrice"
-                                type="number"
-                                step="0.01"
-                                value={String(draftRequest.maxPrice)}
-                                onChange={e =>
-                                  setDraftRequest(prev => ({
-                                    ...prev,
-                                    maxPrice: coerceNumber(
-                                      e.target.value,
-                                      prev.maxPrice
-                                    ),
-                                  }))
-                                }
-                                className="h-8"
-                              />
-                            </div>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FilterChip
-                            label="Avg Vol"
-                            value={formatCompact(draftRequest.minAvgVol)}
-                            defaultValue={formatCompact(
-                              definition.defaultRequest.minAvgVol
-                            )}
-                          />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-48 p-3">
-                          <div className="grid gap-2">
-                            <Label htmlFor="minAvgVol" className="text-xs">
-                              Min avg vol
-                            </Label>
-                            <Input
-                              id="minAvgVol"
-                              type="number"
-                              min={0}
-                              step={10000}
-                              value={String(draftRequest.minAvgVol)}
-                              onChange={e =>
-                                setDraftRequest(prev => ({
-                                  ...prev,
-                                  minAvgVol: coerceInt(
-                                    e.target.value,
-                                    prev.minAvgVol
-                                  ),
-                                }))
-                              }
-                              className="h-8"
-                            />
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FilterChip
-                            label="Change %"
-                            value={`${draftRequest.minChangePct}%`}
-                            defaultValue={`${definition.defaultRequest.minChangePct}%`}
-                          />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-40 p-3">
-                          <div className="grid gap-2">
-                            <Label htmlFor="minChangePct" className="text-xs">
-                              Min change %
-                            </Label>
-                            <Input
-                              id="minChangePct"
-                              type="number"
-                              step="0.1"
-                              value={String(draftRequest.minChangePct)}
-                              onChange={e =>
-                                setDraftRequest(prev => ({
-                                  ...prev,
-                                  minChangePct: coerceNumber(
-                                    e.target.value,
-                                    prev.minChangePct
-                                  ),
-                                }))
-                              }
-                              className="h-8"
-                            />
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FilterChip
-                            label="Interval"
-                            value={draftRequest.interval}
-                            defaultValue={definition.defaultRequest.interval}
-                          />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-40 p-3">
-                          <div className="grid gap-2">
-                            <Label className="text-xs">Interval</Label>
-                            <Select
-                              value={draftRequest.interval}
-                              onValueChange={value =>
-                                setDraftRequest(prev => ({
-                                  ...prev,
-                                  interval: value,
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {['1m', '2m', '5m', '15m', '30m', '60m'].map(
-                                  v => (
-                                    <SelectItem key={v} value={v}>
-                                      {v}
-                                    </SelectItem>
-                                  )
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-
-                      {definition.id === 'day-gainers' && (
+                    <div className="relative flex-1 min-w-[200px] max-w-2xl">
+                      <div
+                        id="filter-scroll-container"
+                        className="wt-scrollbar-x flex items-center gap-2 overflow-x-auto pb-2 pr-1 md:pb-0"
+                      >
                         <Popover>
                           <PopoverTrigger asChild>
                             <FilterChip
-                              label="Volume"
-                              value={formatCompact(
-                                (
-                                  draftRequest as ScannerRequestById['day-gainers']
-                                ).minTodayVolume
-                              )}
+                              label="Price"
+                              value={`${draftRequest.minPrice}-${draftRequest.maxPrice}`}
+                              defaultValue={`${definition.defaultRequest.minPrice}-${definition.defaultRequest.maxPrice}`}
+                            />
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-3">
+                            <div className="grid gap-3">
+                              <div className="grid gap-1">
+                                <Label htmlFor="minPrice" className="text-xs">
+                                  Min price
+                                </Label>
+                                <Input
+                                  id="minPrice"
+                                  type="number"
+                                  step="0.01"
+                                  value={String(draftRequest.minPrice)}
+                                  onChange={e =>
+                                    setDraftRequest(prev => ({
+                                      ...prev,
+                                      minPrice: coerceNumber(
+                                        e.target.value,
+                                        prev.minPrice
+                                      ),
+                                    }))
+                                  }
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="grid gap-1">
+                                <Label htmlFor="maxPrice" className="text-xs">
+                                  Max price
+                                </Label>
+                                <Input
+                                  id="maxPrice"
+                                  type="number"
+                                  step="0.01"
+                                  value={String(draftRequest.maxPrice)}
+                                  onChange={e =>
+                                    setDraftRequest(prev => ({
+                                      ...prev,
+                                      maxPrice: coerceNumber(
+                                        e.target.value,
+                                        prev.maxPrice
+                                      ),
+                                    }))
+                                  }
+                                  className="h-8"
+                                />
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FilterChip
+                              label="Avg Vol"
+                              value={formatCompact(draftRequest.minAvgVol)}
                               defaultValue={formatCompact(
-                                (
-                                  definition.defaultRequest as ScannerRequestById['day-gainers']
-                                ).minTodayVolume
+                                definition.defaultRequest.minAvgVol
                               )}
                             />
                           </PopoverTrigger>
                           <PopoverContent className="w-48 p-3">
                             <div className="grid gap-2">
-                              <Label
-                                htmlFor="minTodayVolume"
-                                className="text-xs"
-                              >
-                                Min today volume
+                              <Label htmlFor="minAvgVol" className="text-xs">
+                                Min avg vol
                               </Label>
                               <Input
-                                id="minTodayVolume"
+                                id="minAvgVol"
                                 type="number"
                                 min={0}
                                 step={10000}
-                                value={String(
-                                  (
-                                    draftRequest as ScannerRequestById['day-gainers']
-                                  ).minTodayVolume
-                                )}
+                                value={String(draftRequest.minAvgVol)}
                                 onChange={e =>
                                   setDraftRequest(prev => ({
                                     ...prev,
-                                    minTodayVolume: coerceInt(
+                                    minAvgVol: coerceInt(
                                       e.target.value,
-                                      (
-                                        prev as ScannerRequestById['day-gainers']
-                                      ).minTodayVolume
+                                      prev.minAvgVol
                                     ),
                                   }))
                                 }
@@ -1027,57 +971,180 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                             </div>
                           </PopoverContent>
                         </Popover>
-                      )}
+
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FilterChip
+                              label="Change %"
+                              value={`${draftRequest.minChangePct}%`}
+                              defaultValue={`${definition.defaultRequest.minChangePct}%`}
+                            />
+                          </PopoverTrigger>
+                          <PopoverContent className="w-40 p-3">
+                            <div className="grid gap-2">
+                              <Label htmlFor="minChangePct" className="text-xs">
+                                Min change %
+                              </Label>
+                              <Input
+                                id="minChangePct"
+                                type="number"
+                                step="0.1"
+                                value={String(draftRequest.minChangePct)}
+                                onChange={e =>
+                                  setDraftRequest(prev => ({
+                                    ...prev,
+                                    minChangePct: coerceNumber(
+                                      e.target.value,
+                                      prev.minChangePct
+                                    ),
+                                  }))
+                                }
+                                className="h-8"
+                              />
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FilterChip
+                              label="Interval"
+                              value={draftRequest.interval}
+                              defaultValue={definition.defaultRequest.interval}
+                            />
+                          </PopoverTrigger>
+                          <PopoverContent className="w-40 p-3">
+                            <div className="grid gap-2">
+                              <Label className="text-xs">Interval</Label>
+                              <Select
+                                value={draftRequest.interval}
+                                onValueChange={value =>
+                                  setDraftRequest(prev => ({
+                                    ...prev,
+                                    interval: value,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {['1m', '2m', '5m', '15m', '30m', '60m'].map(
+                                    v => (
+                                      <SelectItem key={v} value={v}>
+                                        {v}
+                                      </SelectItem>
+                                    )
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        {definition.id === 'day-gainers' && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FilterChip
+                                label="Volume"
+                                value={formatCompact(
+                                  (
+                                    draftRequest as ScannerRequestById['day-gainers']
+                                  ).minTodayVolume
+                                )}
+                                defaultValue={formatCompact(
+                                  (
+                                    definition.defaultRequest as ScannerRequestById['day-gainers']
+                                  ).minTodayVolume
+                                )}
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-48 p-3">
+                              <div className="grid gap-2">
+                                <Label
+                                  htmlFor="minTodayVolume"
+                                  className="text-xs"
+                                >
+                                  Min today volume
+                                </Label>
+                                <Input
+                                  id="minTodayVolume"
+                                  type="number"
+                                  min={0}
+                                  step={10000}
+                                  value={String(
+                                    (
+                                      draftRequest as ScannerRequestById['day-gainers']
+                                    ).minTodayVolume
+                                  )}
+                                  onChange={e =>
+                                    setDraftRequest(prev => ({
+                                      ...prev,
+                                      minTodayVolume: coerceInt(
+                                        e.target.value,
+                                        (
+                                          prev as ScannerRequestById['day-gainers']
+                                        ).minTodayVolume
+                                      ),
+                                    }))
+                                  }
+                                  className="h-8"
+                                />
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="symbolFilter"
+                        className="text-xs font-semibold text-muted-foreground"
+                      >
+                        Symbol
+                      </Label>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                        <Input
+                          id="symbolFilter"
+                          placeholder="Search..."
+                          value={symbolFilter}
+                          onChange={e => {
+                            setPageIndex(0)
+                            setSelectedSymbol(null)
+                            setIsPanelVisible(true)
+                            setSymbolFilter(e.target.value)
+                          }}
+                          className="h-8 w-36 pl-8"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Label
-                      htmlFor="symbolFilter"
-                      className="text-xs font-semibold text-muted-foreground"
-                    >
-                      Symbol
-                    </Label>
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
-                      <Input
-                        id="symbolFilter"
-                        placeholder="Search..."
-                        value={symbolFilter}
-                        onChange={e => {
-                          setPageIndex(0)
-                          setSelectedSymbol(null)
-                          setIsPanelVisible(true)
-                          setSymbolFilter(e.target.value)
+                  {appliedFilterCount > 0 && (
+                    <div className="mt-3">
+                      <ActiveFilters
+                        filters={appliedFilters}
+                        onRemove={key => {
+                          const defaultVal =
+                            definition.defaultRequest[
+                              key as keyof typeof definition.defaultRequest
+                            ]
+                          setDraftRequest(prev => ({
+                            ...prev,
+                            [key]: defaultVal,
+                          }))
+                          setAppliedRequest(prev => ({
+                            ...prev,
+                            [key]: defaultVal,
+                          }))
                         }}
-                        className="h-8 w-36 pl-8"
                       />
                     </div>
-                  </div>
-                </div>
-
-                {appliedFilterCount > 0 && (
-                  <div className="mt-3">
-                    <ActiveFilters
-                      filters={appliedFilters}
-                      onRemove={key => {
-                        const defaultVal =
-                          definition.defaultRequest[
-                            key as keyof typeof definition.defaultRequest
-                          ]
-                        setDraftRequest(prev => ({
-                          ...prev,
-                          [key]: defaultVal,
-                        }))
-                        setAppliedRequest(prev => ({
-                          ...prev,
-                          [key]: defaultVal,
-                        }))
-                      }}
-                    />
-                  </div>
-                )}
-              </CardContent>
+                  )}
+                </CardContent>
+              )}
             </Card>
 
             <Card className="flex-1 min-h-0">

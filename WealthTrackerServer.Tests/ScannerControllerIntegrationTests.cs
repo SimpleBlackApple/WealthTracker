@@ -200,4 +200,16 @@ public sealed class FakeMarketDataClient : IMarketDataClient
   {
     throw new NotImplementedException();
   }
+
+  public Task<QuotesResponse> GetQuotesAsync(
+    QuotesRequest request,
+    CancellationToken cancellationToken)
+  {
+    return Task.FromResult(new QuotesResponse
+    {
+      AsOf = DateTimeOffset.UtcNow,
+      Results = [],
+      Cache = null
+    });
+  }
 }

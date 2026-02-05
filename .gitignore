@@ -17,6 +17,7 @@ __pycache__/
 # Documents
 docs/*Plan.md
 docs/*zh.md
+docs/*me.md
 
 # Agent
 .claude

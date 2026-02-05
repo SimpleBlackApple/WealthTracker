@@ -42,6 +42,11 @@ public class MarketDataClient : IMarketDataClient
         CancellationToken cancellationToken) =>
         PostAsync<VwapApproachRequest, HodVwapApproachResponse>("scan/vwap-approach", request, cancellationToken);
 
+    public Task<QuotesResponse> GetQuotesAsync(
+        QuotesRequest request,
+        CancellationToken cancellationToken) =>
+        PostAsync<QuotesRequest, QuotesResponse>("quotes", request, cancellationToken);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(
         string path,
         TRequest request,

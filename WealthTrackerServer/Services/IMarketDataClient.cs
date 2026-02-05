@@ -10,4 +10,5 @@ public interface IMarketDataClient
     Task<HodVwapMomentumResponse> GetVolumeSpikesAsync(VolumeSpikesRequest request, CancellationToken cancellationToken);
     Task<HodVwapApproachResponse> GetHodApproachAsync(HodApproachRequest request, CancellationToken cancellationToken);
     Task<HodVwapApproachResponse> GetVwapApproachAsync(VwapApproachRequest request, CancellationToken cancellationToken);
+    Task<QuotesResponse> GetQuotesAsync(QuotesRequest request, CancellationToken cancellationToken);
 }

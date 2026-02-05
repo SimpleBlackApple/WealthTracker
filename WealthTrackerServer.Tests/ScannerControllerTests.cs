@@ -13,6 +13,7 @@ public class ScannerControllerTests
   public async Task RunDayGainers_NormalizesDefaults()
   {
     var marketData = new Mock<IMarketDataClient>();
+    var trading = new Mock<ISimulationTradingService>();
     DayGainersRequest? captured = null;
     marketData
       .Setup(x => x.GetDayGainersAsync(It.IsAny<DayGainersRequest>(), It.IsAny<CancellationToken>()))
@@ -24,7 +25,7 @@ public class ScannerControllerTests
         Results = []
       });
 
-    var controller = new ScannerController(marketData.Object);
+    var controller = new ScannerController(marketData.Object, trading.Object);
     var request = new DayGainersRequest
     {
       UniverseLimit = 0,
@@ -52,11 +53,12 @@ public class ScannerControllerTests
   public async Task RunDayGainers_OnHttpError_ReturnsBadGateway()
   {
     var marketData = new Mock<IMarketDataClient>();
+    var trading = new Mock<ISimulationTradingService>();
     marketData
       .Setup(x => x.GetDayGainersAsync(It.IsAny<DayGainersRequest>(), It.IsAny<CancellationToken>()))
       .ThrowsAsync(new HttpRequestException("downstream error"));
 
-    var controller = new ScannerController(marketData.Object);
+    var controller = new ScannerController(marketData.Object, trading.Object);
 
     var result = await controller.RunDayGainers(new DayGainersRequest(), CancellationToken.None);
 

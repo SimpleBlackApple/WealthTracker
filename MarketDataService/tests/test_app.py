@@ -133,5 +133,45 @@ class TestScannerWrappers(unittest.TestCase):
         self.assertIsNone(row["vwap_distance"])
 
 
+class TestQuotesEndpoint(unittest.TestCase):
+    def test_quotes_uses_cache_entry_when_available(self):
+        cached_payload = {
+            "asOf": "2024-01-02T15:00:00Z",
+            "results": [{"symbol": "AAA", "price": 12.34}],
+        }
+        cache_info = {
+            "isStale": False,
+            "source": "cache",
+            "fetchedAt": "2024-01-02T15:00:00Z",
+            "freshUntil": "2024-01-02T15:05:00Z",
+            "staleUntil": "2024-01-03T15:00:00Z",
+            "willRevalidate": False,
+            "retryAfterMs": None,
+        }
+
+        with mock.patch.object(
+            app, "_read_scan_cache_entry", return_value=(cached_payload, cache_info)
+        ):
+            result = app.quotes(app.QuotesRequest(tickers=["AAA"]))
+
+        self.assertEqual(result["asOf"], "2024-01-02T15:00:00Z")
+        self.assertEqual(result["results"][0]["symbol"], "AAA")
+        self.assertEqual(result["results"][0]["price"], 12.34)
+        self.assertEqual(result["cache"]["source"], "cache")
+
+    def test_quotes_computes_price_from_last_close(self):
+        tz = ZoneInfo("America/New_York")
+        idx = pd.DatetimeIndex([datetime(2024, 1, 2, 10, 0, tzinfo=tz)])
+        df = pd.DataFrame({"Close": [5.0]}, index=idx)
+
+        with mock.patch.object(app, "_read_scan_cache_entry", return_value=(None, None)), mock.patch.object(
+            app, "_write_scan_cache_entry", return_value={}
+        ), mock.patch.object(app, "_download_intraday", return_value={"AAA": df}):
+            result = app.quotes(app.QuotesRequest(tickers=["AAA"], interval="1m", period="1d"))
+
+        self.assertEqual(result["results"][0]["symbol"], "AAA")
+        self.assertEqual(result["results"][0]["price"], 5.0)
+
+
 if __name__ == "__main__":
     unittest.main()

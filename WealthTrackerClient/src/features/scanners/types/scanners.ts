@@ -2,6 +2,7 @@ import {
   Activity,
   ArrowUpToLine,
   BarChart3,
+  Briefcase,
   Compass,
   type LucideIcon,
   Target,
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react'
 
 export type ScannerId =
+  | 'holdings'
   | 'day-gainers'
   | 'hod-breakouts'
   | 'vwap-breakouts'
@@ -76,7 +78,12 @@ export type VwapApproachRequest = ScannerUniverseRequest & {
   adaptiveThresholds: boolean
 }
 
+export type HoldingsRequest = ScannerUniverseRequest & {
+  portfolioId: number | null
+}
+
 export type ScannerRequestById = {
+  holdings: HoldingsRequest
   'day-gainers': DayGainersRequest
   'hod-breakouts': HodBreakoutsRequest
   'vwap-breakouts': VwapBreakoutsRequest
@@ -126,6 +133,18 @@ export type HodVwapApproachRow = {
   relative_volume?: number | null
 }
 
+export type HoldingsRow = {
+  symbol: string
+  exchange?: string | null
+  price?: number | null
+  quantity: number
+  avg_cost: number
+  unrealized_pl?: number | null
+  unrealized_pl_pct?: number | null
+  realized_pl?: number | null
+  is_short?: boolean | null
+}
+
 export type CacheInfo = {
   isStale: boolean
   source: string
@@ -145,6 +164,7 @@ export type ScannerResponse<TRow> = {
 }
 
 export type ScannerResponseById = {
+  holdings: ScannerResponse<HoldingsRow>
   'day-gainers': ScannerResponse<DayGainerRow>
   'hod-breakouts': ScannerResponse<IntradayMomentumRow>
   'vwap-breakouts': ScannerResponse<IntradayMomentumRow>
@@ -189,6 +209,51 @@ const defineScanner = <TScannerId extends ScannerId>(
 ) => scanner
 
 export const SCANNERS = [
+  defineScanner({
+    id: 'holdings',
+    icon: Briefcase,
+    title: 'Holdings',
+    description: 'Symbols you currently hold in the selected portfolio.',
+    defaultRequest: {
+      ...baseDefaults,
+      universeLimit: 200,
+      limit: 25,
+      minPrice: 0,
+      maxPrice: 10_000,
+      minAvgVol: 0,
+      minChangePct: 0.0,
+      portfolioId: null,
+    },
+    defaultSort: { key: 'unrealized_pl', direction: 'desc' },
+    columns: [
+      { key: 'symbol', header: 'Symbol', getValue: row => row.symbol },
+      {
+        key: 'quantity',
+        header: 'Qty',
+        align: 'right',
+        getValue: r => r.quantity,
+      },
+      {
+        key: 'avg_cost',
+        header: 'Avg',
+        align: 'right',
+        getValue: r => r.avg_cost,
+      },
+      { key: 'price', header: 'Mark', align: 'right', getValue: r => r.price },
+      {
+        key: 'unrealized_pl',
+        header: 'Unrealized',
+        align: 'right',
+        getValue: r => r.unrealized_pl ?? null,
+      },
+      {
+        key: 'unrealized_pl_pct',
+        header: 'Unrlzd %',
+        align: 'right',
+        getValue: r => r.unrealized_pl_pct ?? null,
+      },
+    ],
+  }),
   defineScanner({
     id: 'day-gainers',
     icon: TrendingUp,

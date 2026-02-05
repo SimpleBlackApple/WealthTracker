@@ -20,6 +20,19 @@ vi.mock('@/features/scanners/components/TradingViewChart', () => ({
   TradingViewChart: () => <div data-testid="tradingview-chart" />,
 }))
 
+vi.mock('@/features/trading/contexts/TradingContext', () => ({
+  useTradingContext: () => ({
+    activePortfolioId: 1,
+  }),
+}))
+
+vi.mock('@/features/trading/hooks/usePortfolios', () => ({
+  usePortfolios: () => ({
+    data: [{ id: 1, name: 'Test portfolio' }],
+    isLoading: false,
+  }),
+}))
+
 const sampleResponse = {
   scanner: 'day_gainers',
   sorted_by: 'change_pct',

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import threading
@@ -288,6 +289,24 @@ class HistoryResponse(BaseModel):
     bars: List[HistoryBar]
 
 
+class QuoteRow(BaseModel):
+    symbol: str
+    price: Optional[float] = None
+
+
+class QuotesRequest(BaseModel):
+    tickers: List[str] = []
+    interval: str = "1m"
+    period: str = "1d"
+    prepost: bool = False
+
+
+class QuotesResponse(BaseModel):
+    asOf: str
+    results: List[QuoteRow]
+    cache: Optional[dict] = None
+
+
 def _safe_float(value: object) -> Optional[float]:
     try:
         if value is None:
@@ -310,6 +329,68 @@ def _chunk(items: List[str], size: int) -> List[List[str]]:
     if size <= 0:
         return [items]
     return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _normalize_tickers(tickers: List[str]) -> List[str]:
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for raw in tickers or []:
+        if raw is None:
+            continue
+        t = str(raw).strip().upper()
+        if not t:
+            continue
+        if t in seen:
+            continue
+        seen.add(t)
+        normalized.append(t)
+    return normalized
+
+
+def _quotes_cache_key(tickers: List[str], interval: str, period: str, prepost: bool) -> str:
+    normalized = sorted(_normalize_tickers(tickers))
+    joined = ",".join(normalized)
+    digest = hashlib.sha1(joined.encode("utf-8")).hexdigest()
+    return f"md:quotes:last:v1:{digest}:{interval}:{period}:prepost={1 if prepost else 0}"
+
+
+def _validate_quotes_request(request: QuotesRequest) -> None:
+    interval = (request.interval or "").strip()
+    period = (request.period or "").strip()
+    if interval not in {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}:
+        raise HTTPException(status_code=400, detail="Unsupported interval")
+    if period not in {"1d", "5d"}:
+        raise HTTPException(status_code=400, detail="Unsupported period")
+
+
+def _compute_quotes_payload(request: QuotesRequest) -> dict:
+    tickers = _normalize_tickers(request.tickers)
+    if not tickers:
+        return {"asOf": utc_now_iso(), "results": []}
+
+    interval = (request.interval or "1m").strip()
+    period = (request.period or "1d").strip()
+    prepost = bool(request.prepost)
+
+    frames = _download_intraday(tickers, interval=interval, period=period, prepost=prepost)
+
+    results: List[dict] = []
+    for ticker in tickers:
+        df = frames.get(ticker)
+        price: Optional[float] = None
+        if df is not None and not getattr(df, "empty", True) and "Close" in df.columns:
+            try:
+                close_series = df["Close"].dropna()
+                if not close_series.empty:
+                    last = close_series.iloc[-1]
+                    if not pd.isna(last):
+                        price = float(last)
+            except Exception:
+                price = None
+
+        results.append({"symbol": ticker, "price": price})
+
+    return {"asOf": utc_now_iso(), "results": results}
 
 
 def _map_quote_extended(quote: dict) -> Optional[dict]:
@@ -1343,6 +1424,40 @@ def history(
     }
     write_cache(cache_key, payload)
     return payload
+
+
+@app.post("/quotes", response_model=QuotesResponse, response_model_exclude_none=True)
+def quotes(request: QuotesRequest) -> dict:
+    _validate_quotes_request(request)
+
+    tickers = _normalize_tickers(request.tickers)
+    if not tickers:
+        return {"asOf": utc_now_iso(), "results": []}
+
+    interval = (request.interval or "1m").strip()
+    period = (request.period or "1d").strip()
+    prepost = bool(request.prepost)
+
+    cache_key = _quotes_cache_key(tickers, interval, period, prepost)
+    cached, cache_info = _read_scan_cache_entry(cache_key)
+    if cached is not None and cache_info is not None:
+        cached["cache"] = cache_info
+        if cache_info.get("willRevalidate"):
+            _schedule_revalidate(
+                cache_key,
+                lambda: _compute_quotes_payload(
+                    QuotesRequest(tickers=tickers, interval=interval, period=period, prepost=prepost)
+                ),
+            )
+        return cached
+
+    payload = _compute_quotes_payload(
+        QuotesRequest(tickers=tickers, interval=interval, period=period, prepost=prepost)
+    )
+    cache_info = _write_scan_cache_entry(cache_key, payload)
+    response = dict(payload)
+    response["cache"] = cache_info
+    return response
 
 
 def _get_features_cached(request: ScannerUniverseRequest) -> dict:

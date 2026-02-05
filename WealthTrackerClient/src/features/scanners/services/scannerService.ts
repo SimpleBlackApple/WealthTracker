@@ -8,6 +8,7 @@ import type {
 } from '@/features/scanners/types/scanners'
 
 const scannerPathById: Record<ScannerId, string> = {
+  holdings: '/scanner/holdings',
   'day-gainers': '/scanner/day-gainers',
   'hod-breakouts': '/scanner/hod-breakouts',
   'vwap-breakouts': '/scanner/vwap-breakouts',
