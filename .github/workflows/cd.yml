@@ -207,7 +207,7 @@ jobs:
             --max-inactive-revisions 4
             --ingress internal
             --target-port 8001
-            --min-replicas 0
+            --min-replicas 1
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
@@ -218,7 +218,7 @@ jobs:
             -n "$MARKETDATA_APP_NAME"
             --image "$IMAGE"
             --max-inactive-revisions 4
-            --min-replicas 0
+            --min-replicas 1
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
@@ -288,7 +288,7 @@ jobs:
             --max-inactive-revisions 4
             --ingress external
             --target-port 5141
-            --min-replicas 0
+            --min-replicas 1
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
@@ -299,7 +299,7 @@ jobs:
             -n "$API_APP_NAME"
             --image "$IMAGE"
             --max-inactive-revisions 4
-            --min-replicas 0
+            --min-replicas 1
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
@@ -359,7 +359,7 @@ jobs:
             --max-inactive-revisions 4
             --ingress external
             --target-port 8080
-            --min-replicas 0
+            --min-replicas 1
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
@@ -370,7 +370,7 @@ jobs:
             -n "$WEB_APP_NAME"
             --image "$IMAGE"
             --max-inactive-revisions 4
-            --min-replicas 0
+            --min-replicas 1
             --max-replicas 1
             --cpu 0.25
             --memory 0.5Gi
