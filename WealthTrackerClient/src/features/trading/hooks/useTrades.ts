@@ -42,6 +42,9 @@ export function useExecuteTrade() {
         queryClient.invalidateQueries({
           queryKey: ['orders', payload.portfolioId],
         }),
+        queryClient.invalidateQueries({
+          queryKey: ['scanner', 'holdings'],
+        }),
       ])
     },
   })
