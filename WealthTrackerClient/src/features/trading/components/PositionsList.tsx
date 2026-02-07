@@ -172,15 +172,17 @@ export function PositionsList({
                     {showCloseAction && (
                       <TableCell className="border-l border-border/50 py-2.5 text-right">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-8 px-3 text-xs"
+                          className="h-8 px-3 text-xs font-semibold border-loss/40 text-loss hover:border-loss/60 hover:bg-loss/10 hover:text-loss focus-visible:ring-loss/20"
                           disabled={
                             portfolioId == null ||
                             p.currentPrice == null ||
                             !Number.isFinite(Number(p.currentPrice)) ||
                             executeTrade.isPending
                           }
+                          title="Close this position"
+                          aria-label={`Close ${p.symbol} position`}
                           onClick={() => {
                             if (portfolioId == null) return
                             if (
@@ -258,7 +260,7 @@ export function PositionsList({
                           {executeTrade.isPending &&
                           closingPositionId === p.positionId
                             ? 'Closing...'
-                            : 'Close'}
+                            : 'Close Position'}
                         </Button>
                       </TableCell>
                     )}

@@ -142,10 +142,12 @@ export function OpenOrdersList({
                     </TableCell>
                     <TableCell className="text-right border-l border-border/50">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-8 px-3 text-xs"
+                        className="h-8 px-3 text-xs font-semibold border-loss/40 text-loss hover:border-loss/60 hover:bg-loss/10 hover:text-loss focus-visible:ring-loss/20"
                         disabled={portfolioId == null || cancel.isPending}
+                        title="Cancel this order"
+                        aria-label={`Cancel ${o.symbol} order`}
                         onClick={() => {
                           if (!portfolioId) return
                           cancel.mutate(
@@ -165,7 +167,7 @@ export function OpenOrdersList({
                           )
                         }}
                       >
-                        Cancel
+                        Cancel Order
                       </Button>
                     </TableCell>
                   </TableRow>

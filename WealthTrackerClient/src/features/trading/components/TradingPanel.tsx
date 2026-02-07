@@ -167,6 +167,7 @@ export function TradingPanel({
 
       <div className="flex-1 overflow-hidden">
         <OrderForm
+          key={`${symbol}-${exchange ?? ''}`}
           portfolioId={resolvedPortfolioId}
           symbol={symbol}
           exchange={exchange}

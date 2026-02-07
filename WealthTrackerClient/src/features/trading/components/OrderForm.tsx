@@ -33,6 +33,22 @@ function toMoney(value: number) {
   })
 }
 
+function roundToCents(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function getMarketableDefaultLimitPrice(
+  price: number,
+  action: TransactionType
+) {
+  const cents = 100
+  const adjusted =
+    action === 'buy' || action === 'cover'
+      ? Math.ceil(price * cents) / cents
+      : Math.floor(price * cents) / cents
+  return Math.max(0.01, roundToCents(adjusted))
+}
+
 export function OrderForm({
   portfolioId,
   symbol,
@@ -46,6 +62,7 @@ export function OrderForm({
   const [quantity, setQuantity] = useState(100)
   const [limitPrice, setLimitPrice] = useState<number | null>(null)
   const [stopPrice, setStopPrice] = useState<number | null>(null)
+  const [hasManualLimitPrice, setHasManualLimitPrice] = useState(false)
 
   const { toast } = useToast()
   const executeTrade = useExecuteTrade()
@@ -117,9 +134,20 @@ export function OrderForm({
 
     if (!canSubmit) return
 
+    const effectiveLimitPrice =
+      orderType === 'limit'
+        ? hasManualLimitPrice
+          ? limitPrice == null
+            ? null
+            : roundToCents(limitPrice)
+          : currentPrice == null || !Number.isFinite(currentPrice)
+            ? null
+            : getMarketableDefaultLimitPrice(currentPrice, action)
+        : undefined
+
     if (
       orderType === 'limit' &&
-      (!limitPrice || !Number.isFinite(limitPrice))
+      (effectiveLimitPrice == null || !Number.isFinite(effectiveLimitPrice))
     ) {
       setLocalError('Limit price is required for limit orders.')
       return
@@ -143,7 +171,7 @@ export function OrderForm({
           quantity,
           price: currentPrice as number,
           orderType,
-          limitPrice: limitPrice ?? undefined,
+          limitPrice: effectiveLimitPrice ?? undefined,
           stopPrice: stopPrice ?? undefined,
         },
       },
@@ -208,7 +236,20 @@ export function OrderForm({
             </Label>
             <Select
               value={action}
-              onValueChange={v => setAction(v as TransactionType)}
+              onValueChange={v => {
+                const nextAction = v as TransactionType
+                setAction(nextAction)
+                if (
+                  orderType === 'limit' &&
+                  !hasManualLimitPrice &&
+                  currentPrice != null &&
+                  Number.isFinite(currentPrice)
+                ) {
+                  setLimitPrice(
+                    getMarketableDefaultLimitPrice(currentPrice, nextAction)
+                  )
+                }
+              }}
             >
               <SelectTrigger id="action" className="h-8 px-2 text-sm">
                 <SelectValue />
@@ -234,6 +275,16 @@ export function OrderForm({
               onValueChange={value => {
                 const next = value as OrderType
                 setOrderType(next)
+                if (
+                  next === 'limit' &&
+                  currentPrice != null &&
+                  Number.isFinite(currentPrice)
+                ) {
+                  setLimitPrice(
+                    getMarketableDefaultLimitPrice(currentPrice, action)
+                  )
+                  setHasManualLimitPrice(false)
+                }
               }}
             >
               <SelectTrigger id="orderType" className="h-8 px-2 text-sm">
@@ -312,14 +363,20 @@ export function OrderForm({
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={() => {
-                    if (orderType === 'limit')
+                    if (orderType === 'limit') {
+                      setHasManualLimitPrice(true)
                       setLimitPrice(p =>
-                        Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01)
+                        roundToCents(
+                          Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01)
+                        )
                       )
-                    else
+                    } else {
                       setStopPrice(p =>
-                        Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01)
+                        roundToCents(
+                          Math.max(0.01, (p ?? currentPrice ?? 0) - 0.01)
+                        )
                       )
+                    }
                   }}
                 >
                   <Minus className="h-3 w-3" />
@@ -332,8 +389,12 @@ export function OrderForm({
                   onChange={e => {
                     const val =
                       e.target.value === '' ? null : Number(e.target.value)
-                    if (orderType === 'limit') setLimitPrice(val)
-                    else setStopPrice(val)
+                    if (orderType === 'limit') {
+                      setHasManualLimitPrice(true)
+                      setLimitPrice(val)
+                    } else {
+                      setStopPrice(val)
+                    }
                   }}
                   className="h-8 px-1 text-center text-sm"
                   placeholder={currentPrice?.toFixed(2)}
@@ -344,9 +405,16 @@ export function OrderForm({
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={() => {
-                    if (orderType === 'limit')
-                      setLimitPrice(p => (p ?? currentPrice ?? 0) + 0.01)
-                    else setStopPrice(p => (p ?? currentPrice ?? 0) + 0.01)
+                    if (orderType === 'limit') {
+                      setHasManualLimitPrice(true)
+                      setLimitPrice(p =>
+                        roundToCents((p ?? currentPrice ?? 0) + 0.01)
+                      )
+                    } else {
+                      setStopPrice(p =>
+                        roundToCents((p ?? currentPrice ?? 0) + 0.01)
+                      )
+                    }
                   }}
                 >
                   <Plus className="h-3 w-3" />
