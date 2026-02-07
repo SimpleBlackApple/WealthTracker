@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronLeft,
   ChevronRight,
   Clock,
   RefreshCw,
@@ -56,6 +57,7 @@ import {
 } from '@/features/scanners/types/scanners'
 
 type SortState = { key: string; direction: SortDirection }
+type PanelMode = 'hidden' | 'normal' | 'expanded'
 type Scanner = (typeof SCANNERS)[number]
 
 const SCANNER_REFRESH_MS = Math.max(
@@ -65,6 +67,26 @@ const SCANNER_REFRESH_MS = Math.max(
 
 const STALE_REVALIDATE_REFETCH_MS = 15_000
 const STALE_REVALIDATE_GIVE_UP_MS = 60_000
+const PANEL_MODE_SESSION_KEY = 'wt:scannerPanelMode'
+const PANEL_VISIBLE_SESSION_KEY = 'wt:scannerPanelVisible'
+
+function getInitialPanelMode(): PanelMode {
+  if (typeof window === 'undefined') return 'normal'
+
+  const storedMode = window.sessionStorage.getItem(PANEL_MODE_SESSION_KEY)
+  if (
+    storedMode === 'hidden' ||
+    storedMode === 'normal' ||
+    storedMode === 'expanded'
+  ) {
+    return storedMode
+  }
+
+  // Legacy compatibility with previous boolean visibility key.
+  const legacyVisible = window.sessionStorage.getItem(PANEL_VISIBLE_SESSION_KEY)
+  if (legacyVisible === '0') return 'hidden'
+  return 'normal'
+}
 
 function useIsDocumentVisible() {
   const [isVisible, setIsVisible] = useState(() => {
@@ -256,7 +278,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
     symbol: string
     exchange: string | null
   } | null>(null)
-  const [isPanelVisible, setIsPanelVisible] = useState(true)
+  const [panelMode, setPanelMode] = useState<PanelMode>(getInitialPanelMode)
 
   const [staleRevalidateStartedAtMs, setStaleRevalidateStartedAtMs] = useState<
     number | null
@@ -265,6 +287,19 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
   const staleRevalidateGiveUpTimeoutIdRef = useRef<number | null>(null)
   const staleRevalidateRefetchTimeoutIdRef = useRef<number | null>(null)
+  const isPanelVisible = panelMode !== 'hidden'
+  const isPanelExpanded = panelMode === 'expanded'
+
+  useEffect(() => {
+    window.sessionStorage.setItem(PANEL_MODE_SESSION_KEY, panelMode)
+  }, [panelMode])
+
+  useEffect(() => {
+    window.sessionStorage.setItem(
+      PANEL_VISIBLE_SESSION_KEY,
+      isPanelVisible ? '1' : '0'
+    )
+  }, [isPanelVisible])
 
   const query = useQuery({
     queryKey: ['scanner', definition.id, effectiveAppliedRequest],
@@ -658,16 +693,20 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
   const showSkeleton =
     query.isLoading || (query.isFetching && rows.length === 0)
+  const hasPanelLayout = Boolean(effectiveSelectedSymbol) || showSkeleton
+  const showMiddleColumn = !isPanelExpanded || !effectiveSelectedSymbol
 
   return (
     <div
       className={cn(
         'grid h-[calc(100vh-5rem)] gap-2 transition-all duration-300 ease-in-out',
-        effectiveSelectedSymbol || showSkeleton
-          ? isPanelVisible
-            ? 'lg:grid-cols-[240px_1fr_minmax(400px,600px)]'
-            : 'lg:grid-cols-[240px_1fr_12px]'
-          : 'lg:grid-cols-[240px_1fr]'
+        hasPanelLayout
+          ? isPanelExpanded
+            ? 'lg:grid-cols-[240px_minmax(0,1fr)]'
+            : isPanelVisible
+              ? 'lg:grid-cols-[240px_minmax(0,1fr)_minmax(400px,600px)]'
+              : 'lg:grid-cols-[240px_minmax(0,1fr)_12px]'
+          : 'lg:grid-cols-[240px_minmax(0,1fr)]'
       )}
     >
       {/* LEFT SIDEBAR - Scanner List */}
@@ -723,7 +762,15 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
 
       {/* MIDDLE & RIGHT WRAPPER */}
       {showSkeleton ? (
-        <div className={cn(isPanelVisible ? 'col-span-2' : 'col-span-1')}>
+        <div
+          className={cn(
+            isPanelExpanded
+              ? 'col-span-1'
+              : isPanelVisible
+                ? 'col-span-2'
+                : 'col-span-1'
+          )}
+        >
           <ScannerGridSkeleton
             columns={definition.columns.length + 1}
             rows={pageSize}
@@ -733,358 +780,237 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
       ) : (
         <>
           {/* MIDDLE - Scanner Results and Filters */}
-          <div className="flex flex-col gap-2 overflow-hidden">
-            <Card className="shrink-0">
-              <CardHeader className="border-b border-border/70 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="font-display text-lg">
-                      {definition.title}
-                    </CardTitle>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {definition.description}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="mr-2 flex items-center gap-2 border-r border-border/70 pr-4 text-xs text-muted-foreground">
-                      <span>{query.isFetching ? 'Refreshing…' : 'Ready'}</span>
-                      {(asOfMs !== null || query.dataUpdatedAt > 0) && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          <span>
-                            As of{' '}
-                            {new Date(
-                              asOfMs ?? query.dataUpdatedAt
-                            ).toLocaleTimeString()}
-                          </span>
-                        </span>
-                      )}
-                      {isStale && (
-                        <div
-                          title="Stale data (showing cached results)"
-                          className="flex items-center"
-                        >
-                          <AlertTriangle
-                            className="h-3.5 w-3.5 text-amber-600"
-                            aria-label="Stale data"
-                          />
-                        </div>
-                      )}
+          {showMiddleColumn && (
+            <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
+              <Card className="shrink-0">
+                <CardHeader className="border-b border-border/70 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="font-display text-lg">
+                        {definition.title}
+                      </CardTitle>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {definition.description}
+                      </p>
                     </div>
-                    <Button
-                      onClick={() => {
-                        setPageIndex(0)
-                        setSelectedSymbol(null)
-                        setIsPanelVisible(true)
-                        if (isHoldings) {
-                          refetch()
-                          return
-                        }
-                        setAppliedRequest(draftRequest)
-                      }}
-                      disabled={
-                        query.isFetching ||
-                        (isHoldings && resolvedPortfolioId === null)
-                      }
-                      size="sm"
-                      className="h-8 px-4 bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm shadow-primary/20"
-                    >
-                      {isHoldings ? 'Refresh' : 'Run'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 w-8 p-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
-                      onClick={() => {
-                        if (
-                          staleRevalidateGiveUpTimeoutIdRef.current !== null
-                        ) {
-                          window.clearTimeout(
-                            staleRevalidateGiveUpTimeoutIdRef.current
-                          )
-                          staleRevalidateGiveUpTimeoutIdRef.current = null
-                        }
-
-                        if (
-                          staleRevalidateRefetchTimeoutIdRef.current !== null
-                        ) {
-                          window.clearTimeout(
-                            staleRevalidateRefetchTimeoutIdRef.current
-                          )
-                          staleRevalidateRefetchTimeoutIdRef.current = null
-                        }
-
-                        setStaleRevalidateTimedOut(false)
-                        setStaleRevalidateStartedAtMs(
-                          isStale && willRevalidate ? Date.now() : null
-                        )
-                        query.refetch()
-                      }}
-                      disabled={query.isFetching}
-                    >
-                      <RefreshCw
-                        className={cn(
-                          'h-3.5 w-3.5',
-                          (query.isFetching || isAutoRevalidating) &&
-                            'animate-spin'
-                        )}
-                      />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
-                      onClick={() => {
-                        setSelectedSymbol(null)
-                        setIsPanelVisible(true)
-                        setDraftRequest(definition.defaultRequest)
-                        setAppliedRequest(definition.defaultRequest)
-                        setSort(definition.defaultSort)
-                        setPageIndex(0)
-                        setSymbolFilter('')
-                      }}
-                    >
-                      Reset
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              {isHoldings ? (
-                <CardContent className="px-4 pb-4 pt-3">
-                  <div className="text-[11px] text-muted-foreground">
-                    No filters for Holdings. Use search + sort to triage, then
-                    open the chart/trade panel on the right.
-                  </div>
-                </CardContent>
-              ) : (
-                <CardContent className="px-4 pb-4 pt-3">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-muted-foreground">
-                        Filters
-                      </span>
-                      <span
-                        className={cn(
-                          'rounded-full border px-2 py-0.5 text-xs font-semibold',
-                          appliedFilterCount > 0
-                            ? 'border-primary/40 bg-primary/10 text-primary'
-                            : 'border-border/70 bg-card text-muted-foreground'
+                      <div className="mr-2 flex items-center gap-2 border-r border-border/70 pr-4 text-xs text-muted-foreground">
+                        <span>
+                          {query.isFetching ? 'Refreshing…' : 'Ready'}
+                        </span>
+                        {(asOfMs !== null || query.dataUpdatedAt > 0) && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>
+                              As of{' '}
+                              {new Date(
+                                asOfMs ?? query.dataUpdatedAt
+                              ).toLocaleTimeString()}
+                            </span>
+                          </span>
                         )}
+                        {isStale && (
+                          <div
+                            title="Stale data (showing cached results)"
+                            className="flex items-center"
+                          >
+                            <AlertTriangle
+                              className="h-3.5 w-3.5 text-amber-600"
+                              aria-label="Stale data"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        onClick={() => {
+                          setPageIndex(0)
+                          setSelectedSymbol(null)
+                          if (isHoldings) {
+                            refetch()
+                            return
+                          }
+                          setAppliedRequest(draftRequest)
+                        }}
+                        disabled={
+                          query.isFetching ||
+                          (isHoldings && resolvedPortfolioId === null)
+                        }
+                        size="sm"
+                        className="h-8 px-4 bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm shadow-primary/20"
                       >
-                        {appliedFilterCount}
-                      </span>
+                        {isHoldings ? 'Refresh' : 'Run'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+                        onClick={() => {
+                          if (
+                            staleRevalidateGiveUpTimeoutIdRef.current !== null
+                          ) {
+                            window.clearTimeout(
+                              staleRevalidateGiveUpTimeoutIdRef.current
+                            )
+                            staleRevalidateGiveUpTimeoutIdRef.current = null
+                          }
+
+                          if (
+                            staleRevalidateRefetchTimeoutIdRef.current !== null
+                          ) {
+                            window.clearTimeout(
+                              staleRevalidateRefetchTimeoutIdRef.current
+                            )
+                            staleRevalidateRefetchTimeoutIdRef.current = null
+                          }
+
+                          setStaleRevalidateTimedOut(false)
+                          setStaleRevalidateStartedAtMs(
+                            isStale && willRevalidate ? Date.now() : null
+                          )
+                          query.refetch()
+                        }}
+                        disabled={query.isFetching}
+                      >
+                        <RefreshCw
+                          className={cn(
+                            'h-3.5 w-3.5',
+                            (query.isFetching || isAutoRevalidating) &&
+                              'animate-spin'
+                          )}
+                        />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+                        onClick={() => {
+                          setSelectedSymbol(null)
+                          setDraftRequest(definition.defaultRequest)
+                          setAppliedRequest(definition.defaultRequest)
+                          setSort(definition.defaultSort)
+                          setPageIndex(0)
+                          setSymbolFilter('')
+                        }}
+                      >
+                        Reset
+                      </Button>
                     </div>
+                  </div>
+                </CardHeader>
+                {isHoldings ? (
+                  <CardContent className="px-4 pb-4 pt-3">
+                    <div className="text-[11px] text-muted-foreground">
+                      No filters for Holdings. Use search + sort to triage, then
+                      open the chart/trade panel on the right.
+                    </div>
+                  </CardContent>
+                ) : (
+                  <CardContent className="px-4 pb-4 pt-3">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Filters
+                        </span>
+                        <span
+                          className={cn(
+                            'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                            appliedFilterCount > 0
+                              ? 'border-primary/40 bg-primary/10 text-primary'
+                              : 'border-border/70 bg-card text-muted-foreground'
+                          )}
+                        >
+                          {appliedFilterCount}
+                        </span>
+                      </div>
 
-                    <div className="relative flex-1 min-w-[200px] max-w-2xl">
-                      <div
-                        id="filter-scroll-container"
-                        className="wt-scrollbar-x flex items-center gap-2 overflow-x-auto pb-2 pr-1 md:pb-0"
-                      >
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FilterChip
-                              label="Price"
-                              value={`${draftRequest.minPrice}-${draftRequest.maxPrice}`}
-                              defaultValue={`${definition.defaultRequest.minPrice}-${definition.defaultRequest.maxPrice}`}
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-56 p-3">
-                            <div className="grid gap-3">
-                              <div className="grid gap-1">
-                                <Label htmlFor="minPrice" className="text-xs">
-                                  Min price
-                                </Label>
-                                <Input
-                                  id="minPrice"
-                                  type="number"
-                                  step="0.01"
-                                  value={String(draftRequest.minPrice)}
-                                  onChange={e =>
-                                    setDraftRequest(prev => ({
-                                      ...prev,
-                                      minPrice: coerceNumber(
-                                        e.target.value,
-                                        prev.minPrice
-                                      ),
-                                    }))
-                                  }
-                                  className="h-8"
-                                />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label htmlFor="maxPrice" className="text-xs">
-                                  Max price
-                                </Label>
-                                <Input
-                                  id="maxPrice"
-                                  type="number"
-                                  step="0.01"
-                                  value={String(draftRequest.maxPrice)}
-                                  onChange={e =>
-                                    setDraftRequest(prev => ({
-                                      ...prev,
-                                      maxPrice: coerceNumber(
-                                        e.target.value,
-                                        prev.maxPrice
-                                      ),
-                                    }))
-                                  }
-                                  className="h-8"
-                                />
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FilterChip
-                              label="Avg Vol"
-                              value={formatCompact(draftRequest.minAvgVol)}
-                              defaultValue={formatCompact(
-                                definition.defaultRequest.minAvgVol
-                              )}
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-48 p-3">
-                            <div className="grid gap-2">
-                              <Label htmlFor="minAvgVol" className="text-xs">
-                                Min avg vol
-                              </Label>
-                              <Input
-                                id="minAvgVol"
-                                type="number"
-                                min={0}
-                                step={10000}
-                                value={String(draftRequest.minAvgVol)}
-                                onChange={e =>
-                                  setDraftRequest(prev => ({
-                                    ...prev,
-                                    minAvgVol: coerceInt(
-                                      e.target.value,
-                                      prev.minAvgVol
-                                    ),
-                                  }))
-                                }
-                                className="h-8"
-                              />
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FilterChip
-                              label="Change %"
-                              value={`${draftRequest.minChangePct}%`}
-                              defaultValue={`${definition.defaultRequest.minChangePct}%`}
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-40 p-3">
-                            <div className="grid gap-2">
-                              <Label htmlFor="minChangePct" className="text-xs">
-                                Min change %
-                              </Label>
-                              <Input
-                                id="minChangePct"
-                                type="number"
-                                step="0.1"
-                                value={String(draftRequest.minChangePct)}
-                                onChange={e =>
-                                  setDraftRequest(prev => ({
-                                    ...prev,
-                                    minChangePct: coerceNumber(
-                                      e.target.value,
-                                      prev.minChangePct
-                                    ),
-                                  }))
-                                }
-                                className="h-8"
-                              />
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FilterChip
-                              label="Interval"
-                              value={draftRequest.interval}
-                              defaultValue={definition.defaultRequest.interval}
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-40 p-3">
-                            <div className="grid gap-2">
-                              <Label className="text-xs">Interval</Label>
-                              <Select
-                                value={draftRequest.interval}
-                                onValueChange={value =>
-                                  setDraftRequest(prev => ({
-                                    ...prev,
-                                    interval: value,
-                                  }))
-                                }
-                              >
-                                <SelectTrigger className="h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {['1m', '2m', '5m', '15m', '30m', '60m'].map(
-                                    v => (
-                                      <SelectItem key={v} value={v}>
-                                        {v}
-                                      </SelectItem>
-                                    )
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-
-                        {definition.id === 'day-gainers' && (
+                      <div className="relative flex-1 min-w-[200px] max-w-2xl">
+                        <div
+                          id="filter-scroll-container"
+                          className="wt-scrollbar-x flex items-center gap-2 overflow-x-auto pb-2 pr-1 md:pb-0"
+                        >
                           <Popover>
                             <PopoverTrigger asChild>
                               <FilterChip
-                                label="Volume"
-                                value={formatCompact(
-                                  (
-                                    draftRequest as ScannerRequestById['day-gainers']
-                                  ).minTodayVolume
-                                )}
+                                label="Price"
+                                value={`${draftRequest.minPrice}-${draftRequest.maxPrice}`}
+                                defaultValue={`${definition.defaultRequest.minPrice}-${definition.defaultRequest.maxPrice}`}
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-3">
+                              <div className="grid gap-3">
+                                <div className="grid gap-1">
+                                  <Label htmlFor="minPrice" className="text-xs">
+                                    Min price
+                                  </Label>
+                                  <Input
+                                    id="minPrice"
+                                    type="number"
+                                    step="0.01"
+                                    value={String(draftRequest.minPrice)}
+                                    onChange={e =>
+                                      setDraftRequest(prev => ({
+                                        ...prev,
+                                        minPrice: coerceNumber(
+                                          e.target.value,
+                                          prev.minPrice
+                                        ),
+                                      }))
+                                    }
+                                    className="h-8"
+                                  />
+                                </div>
+                                <div className="grid gap-1">
+                                  <Label htmlFor="maxPrice" className="text-xs">
+                                    Max price
+                                  </Label>
+                                  <Input
+                                    id="maxPrice"
+                                    type="number"
+                                    step="0.01"
+                                    value={String(draftRequest.maxPrice)}
+                                    onChange={e =>
+                                      setDraftRequest(prev => ({
+                                        ...prev,
+                                        maxPrice: coerceNumber(
+                                          e.target.value,
+                                          prev.maxPrice
+                                        ),
+                                      }))
+                                    }
+                                    className="h-8"
+                                  />
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FilterChip
+                                label="Avg Vol"
+                                value={formatCompact(draftRequest.minAvgVol)}
                                 defaultValue={formatCompact(
-                                  (
-                                    definition.defaultRequest as ScannerRequestById['day-gainers']
-                                  ).minTodayVolume
+                                  definition.defaultRequest.minAvgVol
                                 )}
                               />
                             </PopoverTrigger>
                             <PopoverContent className="w-48 p-3">
                               <div className="grid gap-2">
-                                <Label
-                                  htmlFor="minTodayVolume"
-                                  className="text-xs"
-                                >
-                                  Min today volume
+                                <Label htmlFor="minAvgVol" className="text-xs">
+                                  Min avg vol
                                 </Label>
                                 <Input
-                                  id="minTodayVolume"
+                                  id="minAvgVol"
                                   type="number"
                                   min={0}
                                   step={10000}
-                                  value={String(
-                                    (
-                                      draftRequest as ScannerRequestById['day-gainers']
-                                    ).minTodayVolume
-                                  )}
+                                  value={String(draftRequest.minAvgVol)}
                                   onChange={e =>
                                     setDraftRequest(prev => ({
                                       ...prev,
-                                      minTodayVolume: coerceInt(
+                                      minAvgVol: coerceInt(
                                         e.target.value,
-                                        (
-                                          prev as ScannerRequestById['day-gainers']
-                                        ).minTodayVolume
+                                        prev.minAvgVol
                                       ),
                                     }))
                                   }
@@ -1093,288 +1019,464 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                               </div>
                             </PopoverContent>
                           </Popover>
-                        )}
+
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FilterChip
+                                label="Change %"
+                                value={`${draftRequest.minChangePct}%`}
+                                defaultValue={`${definition.defaultRequest.minChangePct}%`}
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-40 p-3">
+                              <div className="grid gap-2">
+                                <Label
+                                  htmlFor="minChangePct"
+                                  className="text-xs"
+                                >
+                                  Min change %
+                                </Label>
+                                <Input
+                                  id="minChangePct"
+                                  type="number"
+                                  step="0.1"
+                                  value={String(draftRequest.minChangePct)}
+                                  onChange={e =>
+                                    setDraftRequest(prev => ({
+                                      ...prev,
+                                      minChangePct: coerceNumber(
+                                        e.target.value,
+                                        prev.minChangePct
+                                      ),
+                                    }))
+                                  }
+                                  className="h-8"
+                                />
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FilterChip
+                                label="Interval"
+                                value={draftRequest.interval}
+                                defaultValue={
+                                  definition.defaultRequest.interval
+                                }
+                              />
+                            </PopoverTrigger>
+                            <PopoverContent className="w-40 p-3">
+                              <div className="grid gap-2">
+                                <Label className="text-xs">Interval</Label>
+                                <Select
+                                  value={draftRequest.interval}
+                                  onValueChange={value =>
+                                    setDraftRequest(prev => ({
+                                      ...prev,
+                                      interval: value,
+                                    }))
+                                  }
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {[
+                                      '1m',
+                                      '2m',
+                                      '5m',
+                                      '15m',
+                                      '30m',
+                                      '60m',
+                                    ].map(v => (
+                                      <SelectItem key={v} value={v}>
+                                        {v}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          {definition.id === 'day-gainers' && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FilterChip
+                                  label="Volume"
+                                  value={formatCompact(
+                                    (
+                                      draftRequest as ScannerRequestById['day-gainers']
+                                    ).minTodayVolume
+                                  )}
+                                  defaultValue={formatCompact(
+                                    (
+                                      definition.defaultRequest as ScannerRequestById['day-gainers']
+                                    ).minTodayVolume
+                                  )}
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent className="w-48 p-3">
+                                <div className="grid gap-2">
+                                  <Label
+                                    htmlFor="minTodayVolume"
+                                    className="text-xs"
+                                  >
+                                    Min today volume
+                                  </Label>
+                                  <Input
+                                    id="minTodayVolume"
+                                    type="number"
+                                    min={0}
+                                    step={10000}
+                                    value={String(
+                                      (
+                                        draftRequest as ScannerRequestById['day-gainers']
+                                      ).minTodayVolume
+                                    )}
+                                    onChange={e =>
+                                      setDraftRequest(prev => ({
+                                        ...prev,
+                                        minTodayVolume: coerceInt(
+                                          e.target.value,
+                                          (
+                                            prev as ScannerRequestById['day-gainers']
+                                          ).minTodayVolume
+                                        ),
+                                      }))
+                                    }
+                                    className="h-8"
+                                  />
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Label
+                          htmlFor="symbolFilter"
+                          className="text-xs font-semibold text-muted-foreground"
+                        >
+                          Symbol
+                        </Label>
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                          <Input
+                            id="symbolFilter"
+                            placeholder="Search..."
+                            value={symbolFilter}
+                            onChange={e => {
+                              setPageIndex(0)
+                              setSelectedSymbol(null)
+                              setSymbolFilter(e.target.value)
+                            }}
+                            className="h-8 w-36 pl-8"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <Label
-                        htmlFor="symbolFilter"
-                        className="text-xs font-semibold text-muted-foreground"
-                      >
-                        Symbol
-                      </Label>
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
-                        <Input
-                          id="symbolFilter"
-                          placeholder="Search..."
-                          value={symbolFilter}
-                          onChange={e => {
-                            setPageIndex(0)
-                            setSelectedSymbol(null)
-                            setIsPanelVisible(true)
-                            setSymbolFilter(e.target.value)
+                    {appliedFilterCount > 0 && (
+                      <div className="mt-3">
+                        <ActiveFilters
+                          filters={appliedFilters}
+                          onRemove={key => {
+                            const defaultVal =
+                              definition.defaultRequest[
+                                key as keyof typeof definition.defaultRequest
+                              ]
+                            setDraftRequest(prev => ({
+                              ...prev,
+                              [key]: defaultVal,
+                            }))
+                            setAppliedRequest(prev => ({
+                              ...prev,
+                              [key]: defaultVal,
+                            }))
                           }}
-                          className="h-8 w-36 pl-8"
                         />
                       </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+
+              <Card className="flex min-h-0 flex-1 flex-col">
+                <CardHeader className="border-b border-border/70 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-sm font-semibold">
+                        Results
+                      </CardTitle>
+                      <span className="rounded-full border border-border/70 bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground">
+                        {query.isFetching
+                          ? 'Loading...'
+                          : `${totalRows.toLocaleString()} symbols`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs font-semibold text-muted-foreground">
+                        Rows
+                      </Label>
+                      <Select
+                        value={String(pageSize)}
+                        onValueChange={value => {
+                          const next = Number(value)
+                          setPageIndex(0)
+                          setSelectedSymbol(null)
+                          setDraftRequest(prev => ({ ...prev, limit: next }))
+                          setAppliedRequest(prev => ({ ...prev, limit: next }))
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-[76px] bg-card text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {['7', '10', '25', '50', '100'].map(v => (
+                            <SelectItem key={v} value={v} className="text-xs">
+                              {v}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
+                </CardHeader>
+                <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+                  {query.isError ? (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                      {query.error instanceof Error
+                        ? query.error.message
+                        : 'Failed to load scanner results.'}
+                    </div>
+                  ) : query.isFetching && pageRows.length === 0 ? (
+                    <TableSkeleton
+                      columns={definition.columns.length + 1}
+                      rows={pageSize}
+                    />
+                  ) : (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card">
+                      <div className="min-h-0 flex-1 overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
+                                #
+                              </TableHead>
+                              {definition.columns.map(col => {
+                                const active = sort.key === col.key
+                                const Icon = !active
+                                  ? ArrowUpDown
+                                  : sort.direction === 'asc'
+                                    ? ArrowUp
+                                    : ArrowDown
+                                return (
+                                  <TableHead
+                                    key={col.key}
+                                    className={cn(
+                                      'whitespace-nowrap',
+                                      col.align === 'right' && 'text-right',
+                                      col.key === 'symbol' &&
+                                        'border-r border-border'
+                                    )}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSort(col.key)}
+                                      aria-label={`Sort by ${col.header}`}
+                                      className={cn(
+                                        'inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground',
+                                        active && 'text-foreground'
+                                      )}
+                                    >
+                                      {col.header}
+                                      <Icon className="h-3.5 w-3.5 opacity-70" />
+                                    </button>
+                                  </TableHead>
+                                )
+                              })}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pageRows.length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={definition.columns.length + 1}
+                                  className="py-10 text-center text-sm text-muted-foreground"
+                                >
+                                  {query.isFetching
+                                    ? 'Loading...'
+                                    : 'No results. Try widening filters or using period 5d outside market hours.'}
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              pageRows.map((row, idx) => {
+                                const symbol = String(row.symbol)
+                                const exchange =
+                                  (row as { exchange?: string }).exchange ||
+                                  null
+                                const isSelected =
+                                  effectiveSelectedSymbol?.symbol === symbol
+                                return (
+                                  <TableRow
+                                    key={`${symbol}-${idx}`}
+                                    className={cn(
+                                      'cursor-pointer transition-colors hover:!bg-accent',
+                                      isSelected &&
+                                        '!bg-primary/20 hover:!bg-primary/30'
+                                    )}
+                                    onClick={() => {
+                                      setSelectedSymbol({ symbol, exchange })
+                                    }}
+                                  >
+                                    <TableCell className="w-12 text-center text-xs text-muted-foreground">
+                                      {currentPageIndex * pageSize + idx + 1}
+                                    </TableCell>
+                                    {definition.columns.map(col => {
+                                      const value = col.getValue(row as never)
+                                      return (
+                                        <TableCell
+                                          key={col.key}
+                                          className={cn(
+                                            'whitespace-nowrap',
+                                            col.align === 'right' &&
+                                              'text-right font-variant-numeric tabular-nums',
+                                            col.key === 'symbol' &&
+                                              'border-r border-border'
+                                          )}
+                                        >
+                                          {renderCell(col.key, value)}
+                                        </TableCell>
+                                      )
+                                    })}
+                                  </TableRow>
+                                )
+                              })
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
 
-                  {appliedFilterCount > 0 && (
-                    <div className="mt-3">
-                      <ActiveFilters
-                        filters={appliedFilters}
-                        onRemove={key => {
-                          const defaultVal =
-                            definition.defaultRequest[
-                              key as keyof typeof definition.defaultRequest
-                            ]
-                          setDraftRequest(prev => ({
-                            ...prev,
-                            [key]: defaultVal,
-                          }))
-                          setAppliedRequest(prev => ({
-                            ...prev,
-                            [key]: defaultVal,
-                          }))
-                        }}
-                      />
+                      <div className="shrink-0 border-t border-border/70 bg-card px-3 py-2 pr-6">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="w-full text-xs text-muted-foreground sm:w-auto">
+                            {totalRows === 0
+                              ? '0 rows'
+                              : `${currentPageIndex * pageSize + 1}-${Math.min(
+                                  (currentPageIndex + 1) * pageSize,
+                                  totalRows
+                                )} of ${totalRows.toLocaleString()}`}
+                          </div>
+                          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPageIndex(0)}
+                              disabled={currentPageIndex === 0}
+                            >
+                              First
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setPageIndex(p => Math.max(0, p - 1))
+                              }
+                              disabled={currentPageIndex === 0}
+                            >
+                              Prev
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setPageIndex(p =>
+                                  Math.min(totalPages - 1, p + 1)
+                                )
+                              }
+                              disabled={currentPageIndex >= totalPages - 1}
+                            >
+                              Next
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPageIndex(totalPages - 1)}
+                              disabled={currentPageIndex >= totalPages - 1}
+                            >
+                              Last
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </CardContent>
-              )}
-            </Card>
-
-            <Card className="flex-1 min-h-0">
-              <CardHeader className="border-b border-border/70 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="text-sm font-semibold">
-                      Results
-                    </CardTitle>
-                    <span className="rounded-full border border-border/70 bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground">
-                      {query.isFetching
-                        ? 'Loading...'
-                        : `${totalRows.toLocaleString()} symbols`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs font-semibold text-muted-foreground">
-                      Rows
-                    </Label>
-                    <Select
-                      value={String(pageSize)}
-                      onValueChange={value => {
-                        const next = Number(value)
-                        setPageIndex(0)
-                        setSelectedSymbol(null)
-                        setIsPanelVisible(true)
-                        setDraftRequest(prev => ({ ...prev, limit: next }))
-                        setAppliedRequest(prev => ({ ...prev, limit: next }))
-                      }}
-                    >
-                      <SelectTrigger className="h-8 w-[76px] bg-card text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {['7', '10', '25', '50', '100'].map(v => (
-                          <SelectItem key={v} value={v} className="text-xs">
-                            {v}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 flex flex-col h-[calc(100%-45px)]">
-                {query.isError ? (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                    {query.error instanceof Error
-                      ? query.error.message
-                      : 'Failed to load scanner results.'}
-                  </div>
-                ) : query.isFetching && pageRows.length === 0 ? (
-                  <TableSkeleton
-                    columns={definition.columns.length + 1}
-                    rows={pageSize}
-                  />
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12 text-center text-xs font-medium text-muted-foreground">
-                            #
-                          </TableHead>
-                          {definition.columns.map(col => {
-                            const active = sort.key === col.key
-                            const Icon = !active
-                              ? ArrowUpDown
-                              : sort.direction === 'asc'
-                                ? ArrowUp
-                                : ArrowDown
-                            return (
-                              <TableHead
-                                key={col.key}
-                                className={cn(
-                                  'whitespace-nowrap',
-                                  col.align === 'right' && 'text-right',
-                                  col.key === 'symbol' &&
-                                    'border-r border-border'
-                                )}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => toggleSort(col.key)}
-                                  aria-label={`Sort by ${col.header}`}
-                                  className={cn(
-                                    'inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground',
-                                    active && 'text-foreground'
-                                  )}
-                                >
-                                  {col.header}
-                                  <Icon className="h-3.5 w-3.5 opacity-70" />
-                                </button>
-                              </TableHead>
-                            )
-                          })}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pageRows.length === 0 ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={definition.columns.length + 1}
-                              className="py-10 text-center text-sm text-muted-foreground"
-                            >
-                              {query.isFetching
-                                ? 'Loading...'
-                                : 'No results. Try widening filters or using period 5d outside market hours.'}
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          pageRows.map((row, idx) => {
-                            const symbol = String(row.symbol)
-                            const exchange =
-                              (row as { exchange?: string }).exchange || null
-                            const isSelected =
-                              effectiveSelectedSymbol?.symbol === symbol
-                            return (
-                              <TableRow
-                                key={`${symbol}-${idx}`}
-                                className={cn(
-                                  'cursor-pointer transition-colors hover:!bg-accent',
-                                  isSelected &&
-                                    '!bg-primary/20 hover:!bg-primary/30'
-                                )}
-                                onClick={() => {
-                                  setSelectedSymbol({ symbol, exchange })
-                                  setIsPanelVisible(true)
-                                }}
-                              >
-                                <TableCell className="w-12 text-center text-xs text-muted-foreground">
-                                  {currentPageIndex * pageSize + idx + 1}
-                                </TableCell>
-                                {definition.columns.map(col => {
-                                  const value = col.getValue(row as never)
-                                  return (
-                                    <TableCell
-                                      key={col.key}
-                                      className={cn(
-                                        'whitespace-nowrap',
-                                        col.align === 'right' &&
-                                          'text-right font-variant-numeric tabular-nums',
-                                        col.key === 'symbol' &&
-                                          'border-r border-border'
-                                      )}
-                                    >
-                                      {renderCell(col.key, value)}
-                                    </TableCell>
-                                  )
-                                })}
-                              </TableRow>
-                            )
-                          })
-                        )}
-                      </TableBody>
-                    </Table>
-
-                    <div className="border-t border-border/70 bg-card px-3 py-2 pr-6">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="w-full text-xs text-muted-foreground sm:w-auto">
-                          {totalRows === 0
-                            ? '0 rows'
-                            : `${currentPageIndex * pageSize + 1}-${Math.min(
-                                (currentPageIndex + 1) * pageSize,
-                                totalRows
-                              )} of ${totalRows.toLocaleString()}`}
-                        </div>
-                        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPageIndex(0)}
-                            disabled={currentPageIndex === 0}
-                          >
-                            First
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setPageIndex(p => Math.max(0, p - 1))
-                            }
-                            disabled={currentPageIndex === 0}
-                          >
-                            Prev
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setPageIndex(p => Math.min(totalPages - 1, p + 1))
-                            }
-                            disabled={currentPageIndex >= totalPages - 1}
-                          >
-                            Next
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPageIndex(totalPages - 1)}
-                            disabled={currentPageIndex >= totalPages - 1}
-                          >
-                            Last
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+              </Card>
+            </div>
+          )}
 
           {/* RIGHT - Chart + Trading Panel Container */}
           {effectiveSelectedSymbol && (
-            <div className="relative flex h-full">
-              {/* Floating Toggle Button (Chevron) - Fixed position relative to container */}
-              <Button
-                variant="outline"
-                size="icon"
-                className={cn(
-                  'absolute -left-3 top-1/2 z-50 h-7 w-7 -translate-y-1/2 rounded-full bg-card shadow-md shadow-black/10 transition-all duration-300 border border-border/70',
-                  !isPanelVisible &&
-                    'rotate-180 bg-secondary text-foreground hover:bg-secondary/80'
-                )}
-                onClick={() => setIsPanelVisible(!isPanelVisible)}
-                title={isPanelVisible ? 'Hide panel' : 'Show panel'}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+            <div className="relative flex h-full min-h-0">
+              {panelMode === 'normal' ? (
+                <div className="absolute -left-3 top-1/2 z-50 flex -translate-y-1/2 flex-col gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 rounded-full border border-border/70 bg-card shadow-md shadow-black/10 transition-shadow active:translate-y-0 active:shadow-inner"
+                    onClick={() => setPanelMode('expanded')}
+                    title="Expand panel"
+                    aria-label="Expand panel"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 rounded-full border border-border/70 bg-card shadow-md shadow-black/10 transition-shadow active:translate-y-0 active:shadow-inner"
+                    onClick={() => setPanelMode('hidden')}
+                    title="Hide panel"
+                    aria-label="Hide panel"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="absolute -left-3 top-1/2 z-50 -translate-y-1/2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className={cn(
+                      'h-7 w-7 rounded-full border border-border/70 bg-card shadow-md shadow-black/10 transition-shadow active:translate-y-0 active:shadow-inner',
+                      panelMode === 'expanded' &&
+                        'bg-primary/10 text-primary hover:bg-primary/20',
+                      panelMode === 'hidden' &&
+                        'bg-secondary text-foreground hover:bg-secondary/80'
+                    )}
+                    onClick={() => setPanelMode('normal')}
+                    title={
+                      panelMode === 'expanded'
+                        ? 'Restore normal view'
+                        : 'Show panel'
+                    }
+                    aria-label={
+                      panelMode === 'expanded'
+                        ? 'Restore normal view'
+                        : 'Show panel'
+                    }
+                  >
+                    {panelMode === 'expanded' ? (
+                      <ChevronRight className="h-4 w-4" />
+                    ) : (
+                      <ChevronLeft className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              )}
 
               <div
                 className={cn(

@@ -1,3 +1,6 @@
+import { useState } from 'react'
+
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -8,6 +11,8 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { StockSymbolBadge } from '@/features/scanners/components/StockSymbolBadge'
+import { useToast } from '@/components/ui/toast'
+import { useExecuteTrade } from '../hooks/useTrades'
 
 import type { PositionWithPL } from '../types/trading'
 
@@ -22,13 +27,22 @@ function money(value: number | null | undefined) {
 
 export function PositionsList({
   positions,
+  portfolioId = null,
   showContainer = true,
   showHeader = true,
 }: {
   positions: PositionWithPL[]
+  portfolioId?: number | null
   showContainer?: boolean
   showHeader?: boolean
 }) {
+  const { toast } = useToast()
+  const executeTrade = useExecuteTrade()
+  const [closingPositionId, setClosingPositionId] = useState<number | null>(
+    null
+  )
+  const showCloseAction = portfolioId != null
+
   const content = (
     <>
       {showHeader && (
@@ -58,13 +72,18 @@ export function PositionsList({
               <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
                 Realized PnL
               </TableHead>
+              {showCloseAction && (
+                <TableHead className="text-right text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                  Action
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {positions.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={showCloseAction ? 7 : 6}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
                   No positions yet.
@@ -150,6 +169,99 @@ export function PositionsList({
                     >
                       {money(realized)}
                     </TableCell>
+                    {showCloseAction && (
+                      <TableCell className="border-l border-border/50 py-2.5 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-3 text-xs"
+                          disabled={
+                            portfolioId == null ||
+                            p.currentPrice == null ||
+                            !Number.isFinite(Number(p.currentPrice)) ||
+                            executeTrade.isPending
+                          }
+                          onClick={() => {
+                            if (portfolioId == null) return
+                            if (
+                              p.currentPrice == null ||
+                              !Number.isFinite(Number(p.currentPrice))
+                            ) {
+                              toast({
+                                title: 'Cannot close position',
+                                description:
+                                  'Current price is unavailable for this symbol.',
+                                variant: 'warning',
+                                sound: 'warning',
+                              })
+                              return
+                            }
+
+                            const closeType = p.isShort ? 'cover' : 'sell'
+                            setClosingPositionId(p.positionId)
+
+                            executeTrade.mutate(
+                              {
+                                portfolioId,
+                                request: {
+                                  symbol: p.symbol,
+                                  exchange: p.exchange,
+                                  type: closeType,
+                                  quantity: p.quantity,
+                                  price: Number(p.currentPrice),
+                                  orderType: 'market',
+                                },
+                              },
+                              {
+                                onSuccess: tx => {
+                                  toast({
+                                    title:
+                                      tx.status === 'executed'
+                                        ? 'Position closed'
+                                        : 'Close order placed',
+                                    description: `${tx.type.toUpperCase()} ${tx.quantity} ${tx.symbol} @ ${money(tx.price)}`,
+                                    variant:
+                                      tx.status === 'executed'
+                                        ? 'success'
+                                        : 'default',
+                                    sound:
+                                      tx.status === 'executed'
+                                        ? 'success'
+                                        : 'none',
+                                  })
+                                },
+                                onError: error => {
+                                  const message =
+                                    (
+                                      error as {
+                                        response?: {
+                                          data?: { error?: string }
+                                        }
+                                      }
+                                    )?.response?.data?.error ??
+                                    'Failed to close the position.'
+
+                                  toast({
+                                    title: 'Close failed',
+                                    description: message,
+                                    variant: 'destructive',
+                                    sound: 'error',
+                                  })
+                                },
+                                onSettled: () => {
+                                  setClosingPositionId(null)
+                                },
+                              }
+                            )
+                          }}
+                        >
+                          {executeTrade.isPending &&
+                          closingPositionId === p.positionId
+                            ? 'Closing...'
+                            : 'Close'}
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 )
               })
