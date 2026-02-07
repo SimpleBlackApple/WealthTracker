@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { getRuntimeConfig } from '@/config/runtimeConfig'
 
@@ -31,6 +32,7 @@ export function TradingPanel({
   currentPrice,
   priceTimestamp,
 }: TradingPanelProps) {
+  const navigate = useNavigate()
   const refreshMinutes = Math.max(
     1,
     Math.round(getRuntimeConfig().scannerRefreshSeconds / 60)
@@ -44,9 +46,13 @@ export function TradingPanel({
 
   const summaryQuery = usePortfolioSummary(resolvedPortfolioId)
 
+  const goToPortfolio = useCallback(() => {
+    navigate('/portfolio')
+  }, [navigate])
+
   useOrderNotifications({
     portfolioId: resolvedPortfolioId,
-    onGoToPortfolio: () => {},
+    onGoToPortfolio: goToPortfolio,
   })
 
   const [now, setNow] = useState(() => Date.now())
@@ -161,11 +167,12 @@ export function TradingPanel({
 
       <div className="flex-1 overflow-hidden">
         <OrderForm
+          key={`${symbol}-${exchange ?? ''}`}
           portfolioId={resolvedPortfolioId}
           symbol={symbol}
           exchange={exchange}
           currentPrice={currentPrice}
-          onGoToPortfolio={() => {}}
+          onGoToPortfolio={goToPortfolio}
         />
       </div>
     </div>

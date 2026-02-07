@@ -57,6 +57,7 @@ export function PortfolioPage() {
           <CardContent className="flex-1 p-0 overflow-auto">
             <PositionsList
               positions={summaryQuery.data?.positions ?? []}
+              portfolioId={resolvedPortfolioId}
               showContainer={false}
               showHeader={false}
             />
