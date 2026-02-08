@@ -244,22 +244,22 @@ export function AppShell() {
       </main>
 
       {isEditingName && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border/70 bg-card p-6 shadow-xl shadow-black/15">
-            <div className="flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]">
+          <div className="w-80 rounded-xl border border-border/70 bg-popover p-4 shadow-lg shadow-black/10 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-display text-lg font-semibold tracking-tight">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Update name
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  This will update the display name shown across the app.
-                </p>
+                </div>
+                <div className="mt-1 text-sm font-semibold">
+                  Profile settings
+                </div>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full"
+                className="h-8 w-8 rounded-full -mt-1 -mr-1"
                 onClick={() => setIsEditingName(false)}
                 aria-label="Close"
               >
@@ -267,8 +267,8 @@ export function AppShell() {
               </Button>
             </div>
 
-            <div className="mt-6 grid gap-2">
-              <Label htmlFor="name" className="text-xs font-semibold">
+            <div className="mt-4 grid gap-2">
+              <Label htmlFor="name" className="text-xs font-semibold sr-only">
                 Preferred name
               </Label>
               <div className="relative">
@@ -278,17 +278,18 @@ export function AppShell() {
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   placeholder="Your name"
-                  className="h-11 pl-10"
+                  className="h-9 pl-9 text-sm"
                   autoFocus
                 />
               </div>
             </div>
 
-            <div className="mt-6 flex items-center gap-2">
+            <div className="mt-4 flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 flex-1"
+                size="sm"
+                className="h-8 flex-1 text-xs"
                 onClick={() => setIsEditingName(false)}
                 disabled={isUpdating}
               >
@@ -296,7 +297,8 @@ export function AppShell() {
               </Button>
               <Button
                 type="button"
-                className="h-10 flex-1 bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
+                size="sm"
+                className="h-8 flex-1 bg-primary text-primary-foreground text-xs shadow-none hover:bg-primary/90"
                 onClick={handleUpdateName}
                 disabled={
                   isUpdating || !newName.trim() || newName === user?.name
@@ -304,12 +306,12 @@ export function AppShell() {
               >
                 {isUpdating ? (
                   <span className="inline-flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/70 border-t-transparent" />
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary-foreground/70 border-t-transparent" />
                     Saving
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-2">
-                    <Check className="h-4 w-4" />
+                    <Check className="h-3.5 w-3.5" />
                     Save
                   </span>
                 )}
