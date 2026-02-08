@@ -219,7 +219,7 @@ function TradingViewChartComponent({
     <div
       ref={containerRef}
       style={{ backgroundColor: config.bg }}
-      className="h-full w-full overflow-hidden rounded-xl border border-border/70 bg-card"
+      className="h-full w-full overflow-hidden bg-card"
     />
   )
 }

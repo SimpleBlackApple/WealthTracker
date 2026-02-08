@@ -71,6 +71,7 @@
   --sidebar-active-bg: rgba(97, 97, 255, 0.1);
   --header-bg: rgba(15, 17, 26, 0.8);
 
+  --scrollbar-track: rgba(255, 255, 255, 0.04);
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
 }
@@ -161,6 +162,7 @@
   --surface-3: rgba(255, 255, 255, 0.05);
   --sidebar-active-bg: rgba(97, 97, 255, 0.1);
   --header-bg: rgba(15, 17, 26, 0.8);
+  --scrollbar-track: rgba(255, 255, 255, 0.04);
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
 }
@@ -183,9 +185,38 @@
     font-family: var(--font-display);
   }
 
+  .wt-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  .wt-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .wt-scrollbar::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  .wt-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  .wt-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  .wt-scrollbar::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+  }
+
   .wt-scrollbar-x {
     scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
 
   .wt-scrollbar-x::-webkit-scrollbar {
@@ -193,7 +224,7 @@
   }
 
   .wt-scrollbar-x::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--scrollbar-track);
   }
 
   .wt-scrollbar-x::-webkit-scrollbar-thumb {
@@ -205,5 +236,18 @@
 
   .wt-scrollbar-x::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-thumb-hover);
+  }
+
+  .tradingview-widget-container,
+  .tradingview-widget-container__widget {
+    background: var(--card);
+  }
+
+  .tradingview-widget-container iframe {
+    border: 0;
+  }
+
+  .tradingview-widget-copyright {
+    background: transparent;
   }
 }

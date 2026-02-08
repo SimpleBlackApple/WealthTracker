@@ -224,7 +224,7 @@ export function OrderForm({
 
   return (
     <form onSubmit={onSubmit} className="flex h-full flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div className="wt-scrollbar flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {/* Order Action & Type - Side by side */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-0.5">

@@ -710,7 +710,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
       )}
     >
       {/* LEFT SIDEBAR - Scanner List */}
-      <div className="grid gap-2 overflow-auto pr-1 bg-sidebar rounded-xl border border-border/70">
+      <div className="wt-scrollbar grid gap-2 overflow-auto pr-1 bg-sidebar rounded-xl border border-border/70">
         <Card className="overflow-hidden border-none bg-transparent shadow-none">
           <CardHeader className="border-b border-border/70 p-4">
             <CardTitle className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">
@@ -1259,7 +1259,7 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                     />
                   ) : (
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card">
-                      <div className="min-h-0 flex-1 overflow-auto">
+                      <div className="wt-scrollbar min-h-0 flex-1 overflow-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
