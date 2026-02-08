@@ -112,6 +112,14 @@ class AuthService {
     return response.data
   }
 
+  async loginAsDemo(): Promise<AuthResponse> {
+    const response = await this.authInstance.post<AuthResponse>(
+      '/auth/demo/login',
+      {}
+    )
+    return response.data
+  }
+
   async refreshToken(refreshToken: string) {
     const request: RefreshRequest = { refreshToken }
     return await this.authInstance.post<RefreshResponse>(

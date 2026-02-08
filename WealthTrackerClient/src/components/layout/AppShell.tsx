@@ -73,8 +73,12 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/70 bg-header">
+    <div className="relative min-h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30">
+      {/* Ambient Background */}
+      <div className="fixed top-[-20%] right-[-10%] h-[800px] w-[800px] rounded-full bg-purple-600/10 blur-[120px] pointer-events-none z-0" />
+      <div className="fixed bottom-[-20%] left-[-10%] h-[800px] w-[800px] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none z-0" />
+
+      <header className="sticky top-0 z-40 border-b border-border/50 bg-header/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-3">
             <Link
