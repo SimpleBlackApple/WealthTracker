@@ -15,6 +15,7 @@ interface AuthState {
   clearAuth: () => void
   loginWithGoogle: (code: string, redirectUri: string) => Promise<void>
   logout: () => Promise<void>
+  loginAsDemo: () => Promise<void>
   restoreAuth: () => void
   updateUser: (user: User) => void
 }
@@ -110,6 +111,35 @@ export const useAuthStore = create<AuthState>(set => ({
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Login failed',
+        isLoading: false,
+      })
+      throw error
+    }
+  },
+
+  loginAsDemo: async () => {
+    set({ isLoading: true, error: null })
+
+    try {
+      const response = await authService.loginAsDemo()
+
+      const { accessToken, refreshToken, user } = response
+
+      set({
+        user,
+        accessToken,
+        refreshToken,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      })
+
+      localStorage.setItem('accessToken', accessToken)
+      localStorage.setItem('refreshToken', refreshToken)
+      localStorage.setItem('user', JSON.stringify(user))
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Demo login failed',
         isLoading: false,
       })
       throw error

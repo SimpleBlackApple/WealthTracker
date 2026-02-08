@@ -98,6 +98,66 @@ public class AuthController : ControllerBase
   }
 
   /// <summary>
+  /// Logs in as a demo user without OAuth
+  /// </summary>
+  /// <returns>JWT access token, refresh token, and user info</returns>
+  [HttpPost("demo/login")]
+  public async Task<ActionResult<LoginResponse>> DemoLogin()
+  {
+      try
+      {
+          _logger.LogInformation("DemoLogin: Processing demo login");
+
+          var email = "demo@wealthtracker.com";
+          var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+          if (user == null)
+          {
+              _logger.LogInformation("DemoLogin: Creating new demo user");
+              user = new User
+              {
+                  Name = "Demo User",
+                  Email = email,
+                  GoogleId = "demo-user-id", // Placeholder
+                  CreatedAt = DateTime.UtcNow
+              };
+              _context.Users.Add(user);
+              await _context.SaveChangesAsync();
+              _logger.LogInformation("DemoLogin: Created user with ID: {UserId}", user.Id);
+          }
+          else
+          {
+              _logger.LogInformation("DemoLogin: Existing demo user found: {UserId}", user.Id);
+              user.LastLoginAt = DateTime.UtcNow;
+              await _context.SaveChangesAsync();
+          }
+
+          var refreshToken = _jwtService.GenerateRefreshToken();
+          var refreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
+          var refreshExpiryDays = int.Parse(_configuration["Authentication:Jwt:RefreshTokenExpirationDays"]!);
+
+          user.RefreshTokenHash = refreshTokenHash;
+          user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(refreshExpiryDays);
+          await _context.SaveChangesAsync();
+          _logger.LogInformation("DemoLogin: Saved refresh token");
+
+          var accessToken = _jwtService.GenerateAccessToken(user);
+          _logger.LogInformation("DemoLogin: Generated access token");
+
+          return Ok(new LoginResponse(
+            accessToken,
+            refreshToken,
+            new UserDto(user.Id, user.Name, user.Email)
+          ));
+      }
+      catch (Exception ex)
+      {
+          _logger.LogError(ex, "DemoLogin: Error processing demo login");
+          return BadRequest(new { error = ex.Message });
+      }
+  }
+
+  /// <summary>
   /// Refreshes the access token using a valid refresh token
   /// </summary>
   /// <param name="request">Refresh token request</param>

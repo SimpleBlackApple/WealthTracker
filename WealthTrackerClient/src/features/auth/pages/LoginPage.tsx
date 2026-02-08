@@ -1,11 +1,16 @@
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/stores/authStore'
 import { LoginButton } from '@/features/auth/components/LoginButton'
+import { Button } from '@/components/ui/button'
+import logo from '@/assets/logo.png'
 import {
     Wallet,
     PieChart,
     ArrowUpRight,
-    Activity
+    Activity,
+    ArrowRight
 } from 'lucide-react'
 
 // Helper for the 3D tilt effect
@@ -81,6 +86,22 @@ function TiltCard({ children, className = "" }: { children: React.ReactNode, cla
 }
 
 export function LoginPage() {
+    const { loginAsDemo } = useAuthStore()
+    const [isDemoLoading, setIsDemoLoading] = useState(false)
+    const navigate = useNavigate()
+
+    const handleDemoLogin = async () => {
+        setIsDemoLoading(true)
+        try {
+            await loginAsDemo()
+            navigate('/')
+        } catch (error) {
+            console.error('Demo login failed:', error)
+        } finally {
+            setIsDemoLoading(false)
+        }
+    }
+
     return (
         <div className="relative min-h-screen w-full overflow-hidden bg-[#0f111a] text-white selection:bg-purple-500/30">
 
@@ -89,13 +110,13 @@ export function LoginPage() {
             <div className="absolute bottom-[-20%] left-[-10%] h-[800px] w-[800px] rounded-full bg-blue-600/10 blur-[120px]" />
 
             <nav className="relative z-50 flex items-center justify-between px-6 py-6 lg:px-12">
-                <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-600" />
+                <div className="flex items-center gap-3">
+                    <img src={logo} alt="WealthTracker Logo" className="h-8 w-auto" />
                     <span className="text-xl font-bold tracking-tight">WealthTracker</span>
                 </div>
                 <div className="flex gap-4">
-                    <LoginButton className="w-auto px-6 py-2 rounded-full text-sm font-medium">
-                        Login
+                    <LoginButton className="w-auto bg-transparent border border-[#6161FF] text-[#6161FF] hover:bg-[#6161FF]/10 rounded-full px-6 py-2 transition-all duration-300 font-medium text-sm shadow-none">
+                        Log in
                     </LoginButton>
                 </div>
             </nav>
@@ -109,16 +130,15 @@ export function LoginPage() {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
                         </span>
-                        v2.0 Now Live
+                        v1.0 Now Live
                     </div>
 
-                    <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl">
-                        Smart <br />
+                    <h1 className="mb-6 text-4xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl">
+                        Smart{" "}
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
                             Wealth Tracking
-                        </span>
-                        <br />
-                        for Everyone.
+                        </span>{" "}
+                        for Day Traders.
                     </h1>
 
                     <p className="mb-10 max-w-lg text-lg text-white/60 leading-relaxed">
@@ -126,19 +146,26 @@ export function LoginPage() {
                         Experience real-time data with zero latency.
                     </p>
 
-                    <div className="flex flex-col gap-4 sm:flex-row">
-                        <LoginButton className="px-8 py-3 text-base">
+                    <div className="flex items-center gap-4">
+                        <LoginButton className="h-11 px-8 bg-[#6161FF] hover:bg-[#5050FF] text-white rounded-full transition-all duration-300 font-medium flex items-center gap-2 group shadow-[0_4px_14px_0_rgba(97,97,255,0.39)] hover:shadow-[0_6px_20px_rgba(97,97,255,0.23)] hover:-translate-y-[1px]">
                             Get Started
+                            <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                         </LoginButton>
-                    </div>
-
-                    <div className="mt-12 flex items-center gap-4 text-sm text-white/40">
-                        <div className="flex -space-x-3">
-                            {[1, 2, 3, 4].map(i => (
-                                <div key={i} className="h-8 w-8 rounded-full border border-[#0f111a] bg-gradient-to-br from-white/10 to-white/5" />
-                            ))}
-                        </div>
-                        <span>Trusted by 2,000+ traders</span>
+                        <Button
+                            onClick={handleDemoLogin}
+                            disabled={isDemoLoading}
+                            variant="outline"
+                            className="h-11 px-8 bg-transparent border-[#6161FF] text-[#6161FF] hover:bg-[#6161FF]/10 rounded-full transition-all duration-300 font-medium flex items-center gap-2"
+                        >
+                            {isDemoLoading ? (
+                                <>
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#6161FF]/20 border-t-[#6161FF]" />
+                                    Loading...
+                                </>
+                            ) : (
+                                'Demo Account'
+                            )}
+                        </Button>
                     </div>
                 </div>
 
