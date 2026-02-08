@@ -95,9 +95,6 @@ export function AppShell() {
                 <span className="font-display text-sm font-semibold tracking-tight">
                   WealthTracker
                 </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Paper trading desk
-                </span>
               </div>
             </Link>
 

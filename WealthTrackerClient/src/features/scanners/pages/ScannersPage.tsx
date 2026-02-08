@@ -1330,6 +1330,9 @@ function ScannersPageInner({ definition }: { definition: Scanner }) {
                                     )}
                                     onClick={() => {
                                       setSelectedSymbol({ symbol, exchange })
+                                      if (panelMode === 'hidden') {
+                                        setPanelMode('normal')
+                                      }
                                     }}
                                   >
                                     <TableCell className="w-12 text-center text-xs text-muted-foreground">
