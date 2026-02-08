@@ -15,7 +15,12 @@ declare global {
   }
 }
 
-export function LoginButton() {
+interface LoginButtonProps {
+  className?: string
+  children?: React.ReactNode
+}
+
+export function LoginButton({ className, children }: LoginButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleLogin = () => {
@@ -58,9 +63,9 @@ export function LoginButton() {
     <Button
       onClick={handleLogin}
       disabled={isLoading}
-      className="w-full bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20"
+      className={`bg-primary-light hover:bg-primary-lighter text-primary-foreground shadow-sm shadow-primary/20 ${className || 'w-full'}`}
     >
-      {isLoading ? 'Connecting...' : 'Sign in with Google'}
+      {isLoading ? 'Connecting...' : children || 'Sign in with Google'}
     </Button>
   )
 }
