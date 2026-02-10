@@ -8,6 +8,18 @@ This document explains how to use `.github/workflows/cd.yml` to deploy WealthTra
 - We create one persistent Lightsail instance first, then CI/CD only updates containers on that instance.
 - This avoids IP/DNS churn, avoids accidental data loss, and keeps deploys fast.
 
+## Domain in use
+
+Current domain setup (your records):
+
+- `wealthtrackertrading.com -> 52.64.244.242`
+- `www.wealthtrackertrading.com -> 52.64.244.242`
+
+Use the root URL for app config:
+
+- `https://wealthtrackertrading.com`
+- Login page path example: `https://wealthtrackertrading.com/login`
+
 ## Target sizing (based on measured usage + headroom)
 
 The deployment caps your 3 runtime containers to fit a 2 GB / 2 vCPU Lightsail instance:
@@ -22,6 +34,12 @@ Runtime files used by CD:
 
 - `deploy/lightsail/docker-compose.lightsail.yml`
 - `deploy/lightsail/nginx.default.conf.template`
+- `deploy/lightsail/host-nginx/wealthtrackertrading.com.conf`
+
+Important:
+
+- The app container now binds web to `127.0.0.1:8080` (not public `:80`).
+- Public `80/443` should be served by host Nginx with Certbot-managed TLS.
 
 ## What the new `cd.yml` does
 
@@ -40,7 +58,7 @@ Deployment flow:
 
 1. Build 3 Docker images.
 2. Push images to GHCR tagged by commit SHA.
-3. Upload compose + nginx template + generated `.env` to `/opt/wealthtracker` on Lightsail.
+3. Upload compose + app nginx template + host nginx template + generated `.env` to `/opt/wealthtracker` on Lightsail.
 4. `docker compose pull` and `docker compose up -d --remove-orphans`.
 5. Clean old GHCR package versions (keep latest 5 per image repo).
 6. Run final web/API endpoint verification.
@@ -89,20 +107,99 @@ docker --version
 docker compose version
 ```
 
-### 4. Prepare external managed services
+### 4. Install host Nginx + Certbot (no Lightsail LB)
+
+- Purpose: terminate HTTPS on the VM itself and avoid Lightsail Load Balancer fees.
+- Required before your next deploy after this change: the app web container is no longer exposed on host port `80`.
+
+Ubuntu example:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+If Nginx fails to start because port `80` is busy, stop it for now and continue setup:
+
+```bash
+sudo systemctl stop nginx
+```
+
+You can start it again right after the next deploy (when web is moved to `127.0.0.1:8080`).
+
+### 5. Configure host Nginx reverse proxy
+
+- Purpose: expose your app publicly on domain ports `80/443` while app containers stay on localhost ports.
+- Use the template from this repo:
+  - `deploy/lightsail/host-nginx/wealthtrackertrading.com.conf`
+
+Commands (on Lightsail instance):
+
+```bash
+sudo tee /etc/nginx/sites-available/wealthtrackertrading.com >/dev/null <<'EOF'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name wealthtrackertrading.com www.wealthtrackertrading.com;
+
+  location / {
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_pass http://127.0.0.1:8080;
+  }
+}
+EOF
+
+sudo ln -sf /etc/nginx/sites-available/wealthtrackertrading.com /etc/nginx/sites-enabled/wealthtrackertrading.com
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 6. Issue certificate with Certbot
+
+- Purpose: enable HTTPS on your domain and keep certificates renewable.
+
+```bash
+sudo certbot --nginx \
+  -d wealthtrackertrading.com \
+  -d www.wealthtrackertrading.com \
+  --redirect \
+  --agree-tos \
+  --no-eff-email \
+  -m <your-email>
+```
+
+This command updates Nginx config to install the cert and redirect HTTP to HTTPS.
+
+### 7. Verify automatic renewal
+
+- Purpose: ensure HTTPS won't expire silently.
+
+```bash
+systemctl list-timers | grep -E 'certbot|snap.certbot.renew' || true
+sudo certbot renew --dry-run
+```
+
+### 8. Prepare external managed services
 
 - Purpose: stay within 3 containers on Lightsail.
 - Provision these external services:
   - PostgreSQL (Neon): `NEON_CONNECTION_STRING`
   - Redis (Upstash): `UPSTASH_REDIS_URL`
 
-### 5. Prepare GitHub Container Registry access for Lightsail pull
+### 9. Prepare GitHub Container Registry access for Lightsail pull
 
 - Purpose: let the instance pull private GHCR images.
 - Create a PAT with at least `read:packages`.
 - Store as `GHCR_READ_TOKEN` in GitHub secrets.
 
-### 6. Configure GitHub repository secrets
+### 10. Configure GitHub repository secrets
 
 - Purpose: provide deploy credentials/config to the workflow.
 
@@ -113,7 +210,7 @@ Required secrets:
 - `LIGHTSAIL_SSH_PRIVATE_KEY` (PEM private key content)
 - `LIGHTSAIL_SSH_PORT` (optional, default `22`)
 - `GHCR_READ_TOKEN`
-- `FRONTEND_URL` (for example `https://app.example.com`)
+- `FRONTEND_URL` (set this to `https://wealthtrackertrading.com`)
 - `NEON_CONNECTION_STRING`
 - `UPSTASH_REDIS_URL`
 - `GOOGLE_CLIENT_ID`
@@ -157,19 +254,44 @@ docker compose --env-file .env -f docker-compose.lightsail.yml ps
 docker compose --env-file .env -f docker-compose.lightsail.yml logs --tail=200
 ```
 
-### 3. Configure DNS + HTTPS
+### 3. Verify domain + HTTPS routing
 
-- Purpose: required for production-grade security and Google OAuth.
-- Point your domain to the Lightsail static IP.
-- Add TLS termination (for example Lightsail Load Balancer + certificate, or another HTTPS edge).
-- Ensure `FRONTEND_URL` matches the final HTTPS URL exactly.
+- Purpose: confirm DNS and TLS are correctly wired.
+
+If this is your first HTTPS cutover after moving web to `127.0.0.1:8080`, ensure host Nginx is running first:
+
+```bash
+sudo systemctl start nginx
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+```bash
+curl -I http://wealthtrackertrading.com
+curl -I https://wealthtrackertrading.com
+curl -I https://www.wealthtrackertrading.com
+```
+
+Expected:
+
+- HTTP redirects to HTTPS.
+- HTTPS returns valid response with a trusted certificate.
 
 ### 4. Configure Google OAuth
 
 - Purpose: allow sign-in from deployed domain.
 - In Google Cloud Console OAuth client:
-  - Authorized JavaScript origins: `https://<your-frontend-domain>`
-  - Authorized redirect URI: `https://<your-frontend-domain>/auth/callback`
+  - Authorized JavaScript origins: `https://wealthtrackertrading.com`
+  - Authorized redirect URI: `https://wealthtrackertrading.com/auth/callback`
+
+### 5. Check Certbot renewal periodically
+
+- Purpose: catch renewal failures before certificate expiry.
+
+```bash
+sudo certbot renew --dry-run
+sudo systemctl status certbot.timer || true
+```
 
 ## Can I test this CD workflow before pushing to main?
 
@@ -209,3 +331,5 @@ Notes:
 - GitHub Actions fork secret restrictions: https://docs.github.com/en/actions/reference/events-that-trigger-workflows#workflows-in-forked-repositories
 - GitHub packages permissions: https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages
 - Docker Compose CPU/memory service limits: https://docs.docker.com/reference/compose-file/services/
+- Certbot (Nginx plugin): https://eff-certbot.readthedocs.io/en/stable/using.html#nginx
+- Certbot automated renewals: https://eff-certbot.readthedocs.io/en/stable/using.html#automated-renewals

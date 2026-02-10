@@ -266,14 +266,20 @@ jobs:
             "$SSH_TARGET:/tmp/nginx.default.conf.template"
 
           scp -i ~/.ssh/lightsail.key -P "$LIGHTSAIL_SSH_PORT" \
+            deploy/lightsail/host-nginx/wealthtrackertrading.com.conf \
+            "$SSH_TARGET:/tmp/wealthtrackertrading.com.conf"
+
+          scp -i ~/.ssh/lightsail.key -P "$LIGHTSAIL_SSH_PORT" \
             lightsail.env \
             "$SSH_TARGET:/tmp/lightsail.env"
 
           ssh -i ~/.ssh/lightsail.key -p "$LIGHTSAIL_SSH_PORT" "$SSH_TARGET" '
             set -euo pipefail
             sudo mkdir -p /opt/wealthtracker
+            sudo mkdir -p /opt/wealthtracker/host-nginx
             sudo mv /tmp/docker-compose.lightsail.yml /opt/wealthtracker/docker-compose.lightsail.yml
             sudo mv /tmp/nginx.default.conf.template /opt/wealthtracker/nginx.default.conf.template
+            sudo mv /tmp/wealthtrackertrading.com.conf /opt/wealthtracker/host-nginx/wealthtrackertrading.com.conf
             sudo mv /tmp/lightsail.env /opt/wealthtracker/.env
             sudo chown -R $USER:$USER /opt/wealthtracker
           '
@@ -382,13 +388,13 @@ jobs:
           ssh -i ~/.ssh/lightsail.key -p "$LIGHTSAIL_SSH_PORT" "$SSH_TARGET" 'bash -s' <<'REMOTE'
           set -euo pipefail
 
-          web_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/)
+          web_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/)
           if [[ "$web_code" != "200" ]]; then
             echo "Web check failed with HTTP $web_code" >&2
             exit 1
           fi
 
-          api_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/api/)
+          api_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/)
           if [[ "$api_code" != "401" && "$api_code" != "404" ]]; then
             echo "API gateway check failed with HTTP $api_code" >&2
             exit 1
