@@ -254,6 +254,51 @@ docker compose --env-file .env -f docker-compose.lightsail.yml ps
 docker compose --env-file .env -f docker-compose.lightsail.yml logs --tail=200
 ```
 
+### 2.1 Inspect logs for debugging (frontend/backend/market-data + Nginx)
+
+- Purpose: quickly isolate whether failures are in containers or host reverse proxy.
+
+Container logs from anywhere on the server (recommended: absolute paths):
+
+```bash
+docker compose \
+  --env-file /opt/wealthtracker/.env \
+  -f /opt/wealthtracker/docker-compose.lightsail.yml \
+  logs -f --tail=200
+```
+
+Per-service logs:
+
+```bash
+docker compose \
+  --env-file /opt/wealthtracker/.env \
+  -f /opt/wealthtracker/docker-compose.lightsail.yml \
+  logs -f --tail=200 web
+
+docker compose \
+  --env-file /opt/wealthtracker/.env \
+  -f /opt/wealthtracker/docker-compose.lightsail.yml \
+  logs -f --tail=200 api
+
+docker compose \
+  --env-file /opt/wealthtracker/.env \
+  -f /opt/wealthtracker/docker-compose.lightsail.yml \
+  logs -f --tail=200 market-data
+```
+
+Host Nginx logs (required for TLS/redirect/proxy issues):
+
+```bash
+sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log
+sudo journalctl -u nginx -f
+sudo nginx -t
+```
+
+Common gotcha:
+
+- If you run `docker compose --env-file .env ...` from `~`, Compose looks for `/home/<user>/.env`.
+- Either `cd /opt/wealthtracker` first, or always use absolute paths as shown above.
+
 ### 3. Verify domain + HTTPS routing
 
 - Purpose: confirm DNS and TLS are correctly wired.
