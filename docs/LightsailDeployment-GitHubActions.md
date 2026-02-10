@@ -42,8 +42,8 @@ Deployment flow:
 2. Push images to GHCR tagged by commit SHA.
 3. Upload compose + nginx template + generated `.env` to `/opt/wealthtracker` on Lightsail.
 4. `docker compose pull` and `docker compose up -d --remove-orphans`.
-5. Verify web and API gateway responses.
-6. Clean old GHCR package versions (keep latest 5 per image repo).
+5. Clean old GHCR package versions (keep latest 5 per image repo).
+6. Run final web/API endpoint verification.
 
 ## Before pushing to `main` (one-time setup)
 

@@ -313,6 +313,61 @@ jobs:
             docker image prune -af --filter 'until=72h'
           "
 
+  cleanup-ghcr:
+    name: Cleanup old GHCR image versions
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - deploy
+    if: needs.build.outputs.should_push == 'true' && needs.deploy.result == 'success'
+
+    strategy:
+      matrix:
+        package_name:
+          - wealthtracker-web
+          - wealthtracker-api
+          - wealthtracker-market-data
+
+    steps:
+      - name: Delete old versions
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ needs.build.outputs.registry_owner }}
+          package-name: ${{ matrix.package_name }}
+          package-type: container
+          min-versions-to-keep: 5
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  verify:
+    name: Final verification
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - deploy
+      - cleanup-ghcr
+    if: needs.build.outputs.should_deploy == 'true' && needs.deploy.result == 'success' && needs['cleanup-ghcr'].result == 'success'
+
+    steps:
+      - name: Configure SSH
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_SSH_PORT: ${{ secrets.LIGHTSAIL_SSH_PORT }}
+          LIGHTSAIL_SSH_PRIVATE_KEY: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          : "${LIGHTSAIL_HOST:?Missing LIGHTSAIL_HOST secret}"
+          : "${LIGHTSAIL_USER:?Missing LIGHTSAIL_USER secret}"
+          : "${LIGHTSAIL_SSH_PRIVATE_KEY:?Missing LIGHTSAIL_SSH_PRIVATE_KEY secret}"
+
+          LIGHTSAIL_SSH_PORT="${LIGHTSAIL_SSH_PORT:-22}"
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LIGHTSAIL_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/lightsail.key
+          chmod 600 ~/.ssh/lightsail.key
+          ssh-keyscan -p "$LIGHTSAIL_SSH_PORT" -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
+
       - name: Verify deployment
         env:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
@@ -342,28 +397,3 @@ jobs:
           cd /opt/wealthtracker
           docker compose --env-file .env -f docker-compose.lightsail.yml ps
           REMOTE
-
-  cleanup-ghcr:
-    name: Cleanup old GHCR image versions
-    runs-on: ubuntu-latest
-    needs:
-      - build
-      - deploy
-    if: needs.build.outputs.should_push == 'true' && needs.deploy.result == 'success'
-
-    strategy:
-      matrix:
-        package_name:
-          - wealthtracker-web
-          - wealthtracker-api
-          - wealthtracker-market-data
-
-    steps:
-      - name: Delete old versions
-        uses: actions/delete-package-versions@v5
-        with:
-          owner: ${{ needs.build.outputs.registry_owner }}
-          package-name: ${{ matrix.package_name }}
-          package-type: container
-          min-versions-to-keep: 5
-          token: ${{ secrets.GITHUB_TOKEN }}
