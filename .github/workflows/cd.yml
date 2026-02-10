@@ -31,6 +31,7 @@ jobs:
     outputs:
       should_deploy: ${{ steps.vars.outputs.should_deploy }}
       should_push: ${{ steps.vars.outputs.should_push }}
+      registry_owner: ${{ steps.vars.outputs.registry_owner }}
       web_image: ${{ steps.vars.outputs.web_image }}
       api_image: ${{ steps.vars.outputs.api_image }}
       market_data_image: ${{ steps.vars.outputs.market_data_image }}
@@ -55,7 +56,8 @@ jobs:
 
           should_push="$should_deploy"
           image_tag="$GITHUB_SHA"
-          image_prefix="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}"
+          registry_owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          image_prefix="${REGISTRY}/${registry_owner}"
 
           web_image="${image_prefix}/wealthtracker-web:${image_tag}"
           api_image="${image_prefix}/wealthtracker-api:${image_tag}"
@@ -64,6 +66,7 @@ jobs:
           {
             echo "should_deploy=$should_deploy"
             echo "should_push=$should_push"
+            echo "registry_owner=$registry_owner"
             echo "web_image=$web_image"
             echo "api_image=$api_image"
             echo "market_data_image=$market_data_image"
@@ -280,7 +283,7 @@ jobs:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
           LIGHTSAIL_SSH_PORT: ${{ secrets.LIGHTSAIL_SSH_PORT }}
-          GHCR_USERNAME: ${{ github.repository_owner }}
+          GHCR_USERNAME: ${{ needs.build.outputs.registry_owner }}
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
           set -euo pipefail
@@ -359,7 +362,7 @@ jobs:
       - name: Delete old versions
         uses: actions/delete-package-versions@v5
         with:
-          owner: ${{ github.repository_owner }}
+          owner: ${{ needs.build.outputs.registry_owner }}
           package-name: ${{ matrix.package_name }}
           package-type: container
           min-versions-to-keep: 5
