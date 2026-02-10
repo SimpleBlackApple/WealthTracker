@@ -1,0 +1,69 @@
+services:
+  market-data:
+    image: ${MARKET_DATA_IMAGE:?MARKET_DATA_IMAGE is required}
+    container_name: wealthtracker-market-data
+    restart: unless-stopped
+    environment:
+      PORT: 8001
+      REDIS_URL: ${UPSTASH_REDIS_URL:?UPSTASH_REDIS_URL is required}
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-}
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-300}
+      CACHE_STALE_TTL_SECONDS: ${CACHE_STALE_TTL_SECONDS:-86400}
+      SERVE_STALE_WHILE_REVALIDATE: ${SERVE_STALE_WHILE_REVALIDATE:-1}
+      STALE_RETRY_AFTER_MS: ${STALE_RETRY_AFTER_MS:-15000}
+      YF_RATE_LIMIT_SCREEN_PER_MIN: ${YF_RATE_LIMIT_SCREEN_PER_MIN:-6}
+      YF_RATE_LIMIT_DOWNLOAD_PER_MIN: ${YF_RATE_LIMIT_DOWNLOAD_PER_MIN:-10}
+      YF_RATE_LIMIT_TICKER_PER_MIN: ${YF_RATE_LIMIT_TICKER_PER_MIN:-15}
+      REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD: ${REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD:-1}
+    cpus: 0.60
+    mem_limit: 768m
+    ports:
+      - '127.0.0.1:8001:8001'
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE is required}
+    container_name: wealthtracker-api
+    restart: unless-stopped
+    depends_on:
+      - market-data
+    environment:
+      PORT: 5141
+      ASPNETCORE_ENVIRONMENT: Production
+      MIGRATE_ON_STARTUP: ${MIGRATE_ON_STARTUP:-1}
+      FrontendUrl: ${FRONTEND_URL:?FRONTEND_URL is required}
+      MarketDataService__BaseUrl: http://market-data:8001
+      MarketDataService__TimeoutSeconds: ${MARKETDATA_TIMEOUT_SECONDS:-60}
+      ConnectionStrings__DefaultConnection: ${NEON_CONNECTION_STRING:?NEON_CONNECTION_STRING is required}
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET is required}
+      Authentication__Google__RedirectUri: ${FRONTEND_URL}/auth/callback
+      Authentication__Jwt__Issuer: ${JWT_ISSUER:-WealthTracker}
+      Authentication__Jwt__Audience: ${JWT_AUDIENCE:-WealthTrackerApi}
+      Authentication__Jwt__AccessTokenExpirationMinutes: ${JWT_ACCESS_TOKEN_EXP_MINUTES:-60}
+      Authentication__Jwt__RefreshTokenExpirationDays: ${JWT_REFRESH_TOKEN_EXP_DAYS:-7}
+      Authentication__Jwt__RsaPrivateKeyPem: ${JWT_PRIVATE_KEY_PEM:?JWT_PRIVATE_KEY_PEM is required}
+      Authentication__Jwt__RsaPublicKeyPem: ${JWT_PUBLIC_KEY_PEM:?JWT_PUBLIC_KEY_PEM is required}
+    cpus: 0.35
+    mem_limit: 384m
+    ports:
+      - '127.0.0.1:5141:5141'
+
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    container_name: wealthtracker-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      PORT: 8080
+      API_BASE_URL: /api
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      GOOGLE_REDIRECT_URI: ${FRONTEND_URL}/auth/callback
+      SCANNER_REFRESH_SECONDS: ${SCANNER_REFRESH_SECONDS:-300}
+    cpus: 0.15
+    mem_limit: 128m
+    ports:
+      - '80:8080'
+    volumes:
+      - ./nginx.default.conf.template:/etc/nginx/templates/default.conf.template:ro

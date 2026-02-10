@@ -1,474 +1,366 @@
-name: Deploy to Azure Container Apps
+name: Deploy to AWS Lightsail
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to Lightsail (false = build/validate only)
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+  packages: write
+
+concurrency:
+  group: lightsail-cd-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  # Azure resources (edit these once for your subscription)
-  AZURE_LOCATION: australiaeast
-  AZURE_RESOURCE_GROUP: wealthtracker-rg
-  AZURE_CONTAINERAPPS_ENV: wealthtracker-env
-
-  # ACR name must be globally unique and contain only alphanumeric characters.
-  # Example: wealthtrackeracr1234
-  AZURE_ACR_NAME: wealthtrackeracr1234
-
-  # Container App names
-  API_APP_NAME: wealthtracker-api
-  WEB_APP_NAME: wealthtracker-web
-  MARKETDATA_APP_NAME: wealthtracker-market-data
+  REGISTRY: ghcr.io
 
 jobs:
-  deploy:
+  build:
+    name: Build images (and push when deploying)
     runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.vars.outputs.should_deploy }}
+      should_push: ${{ steps.vars.outputs.should_push }}
+      web_image: ${{ steps.vars.outputs.web_image }}
+      api_image: ${{ steps.vars.outputs.api_image }}
+      market_data_image: ${{ steps.vars.outputs.market_data_image }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Ensure Azure providers + extension
-        shell: bash
-        run: |
-          set -euo pipefail
-          az extension add --name containerapp --upgrade --allow-preview true
-
-          # Provider registration is a one-time, subscription-level operation.
-          # If your GitHub Service Principal is scoped only to a Resource Group (recommended),
-          # it will NOT have permission to register providers. In that case, register once
-          # manually (Azure Portal or `az provider register ...`) and rerun the workflow.
-          missing=0
-          for ns in Microsoft.App Microsoft.OperationalInsights Microsoft.ContainerRegistry; do
-            state="$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || true)"
-            if [ "$state" != "Registered" ]; then
-              echo "::error title=Azure provider not registered::$ns registrationState=$state"
-              missing=1
-            fi
-          done
-
-          if [ "$missing" -ne 0 ]; then
-            cat <<'EOF'
-          One or more Azure Resource Providers are not registered in this subscription.
-
-          Fix (run once with an account that has subscription-level permission):
-            az provider register --namespace Microsoft.App --wait
-            az provider register --namespace Microsoft.OperationalInsights --wait
-            az provider register --namespace Microsoft.ContainerRegistry --wait
-
-          Portal alternative:
-            Azure Portal -> Subscriptions -> (your subscription) -> Resource providers -> search + Register.
-          EOF
-            exit 1
-          fi
-
-      - name: Provision resource group, ACR, and Container Apps environment
-        shell: bash
+      - name: Resolve deploy mode and image tags
+        id: vars
+        env:
+          DISPATCH_DEPLOY: ${{ inputs.deploy }}
         run: |
           set -euo pipefail
 
-          az group create -n "$AZURE_RESOURCE_GROUP" -l "$AZURE_LOCATION" >/dev/null
-
-          if ! az acr show -n "$AZURE_ACR_NAME" -g "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-            az acr create \
-              -n "$AZURE_ACR_NAME" \
-              -g "$AZURE_RESOURCE_GROUP" \
-              -l "$AZURE_LOCATION" \
-              --sku Basic \
-              --admin-enabled true \
-              >/dev/null
-          else
-            az acr update -n "$AZURE_ACR_NAME" --admin-enabled true >/dev/null
+          should_deploy=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            should_deploy=true
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DISPATCH_DEPLOY" == "true" ]]; then
+            should_deploy=true
           fi
 
-          if ! az containerapp env show -n "$AZURE_CONTAINERAPPS_ENV" -g "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-            az containerapp env create \
-              -n "$AZURE_CONTAINERAPPS_ENV" \
-              -g "$AZURE_RESOURCE_GROUP" \
-              -l "$AZURE_LOCATION" \
-              >/dev/null
-          fi
+          should_push="$should_deploy"
+          image_tag="$GITHUB_SHA"
+          image_prefix="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}"
 
-          ACR_LOGIN_SERVER="$(az acr show -n "$AZURE_ACR_NAME" --query loginServer -o tsv)"
-          ACR_USERNAME="$(az acr credential show -n "$AZURE_ACR_NAME" --query username -o tsv)"
-          ACR_PASSWORD="$(az acr credential show -n "$AZURE_ACR_NAME" --query passwords[0].value -o tsv)"
+          web_image="${image_prefix}/wealthtracker-web:${image_tag}"
+          api_image="${image_prefix}/wealthtracker-api:${image_tag}"
+          market_data_image="${image_prefix}/wealthtracker-market-data:${image_tag}"
 
           {
-            echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER"
-            echo "ACR_USERNAME=$ACR_USERNAME"
-          } >> "$GITHUB_ENV"
+            echo "should_deploy=$should_deploy"
+            echo "should_push=$should_push"
+            echo "web_image=$web_image"
+            echo "api_image=$api_image"
+            echo "market_data_image=$market_data_image"
+          } >> "$GITHUB_OUTPUT"
 
-          echo "::add-mask::$ACR_PASSWORD"
-          echo "ACR_PASSWORD=$ACR_PASSWORD" >> "$GITHUB_ENV"
+          echo "Deploy mode: $should_deploy"
+          echo "Push images: $should_push"
 
-      - name: Docker login to ACR
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --password-stdin
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and push images
-        shell: bash
+      - name: Login to GHCR
+        if: steps.vars.outputs.should_push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: WealthTrackerClient
+          file: WealthTrackerClient/Dockerfile
+          push: ${{ steps.vars.outputs.should_push == 'true' }}
+          tags: ${{ steps.vars.outputs.web_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: WealthTrackerServer/Dockerfile
+          push: ${{ steps.vars.outputs.should_push == 'true' }}
+          tags: ${{ steps.vars.outputs.api_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build market-data image
+        uses: docker/build-push-action@v6
+        with:
+          context: MarketDataService
+          file: MarketDataService/Dockerfile
+          push: ${{ steps.vars.outputs.should_push == 'true' }}
+          tags: ${{ steps.vars.outputs.market_data_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy on Lightsail (2GB / 2vCPU instance)
+    runs-on: ubuntu-latest
+    needs: build
+    if: needs.build.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_SSH_PORT: ${{ secrets.LIGHTSAIL_SSH_PORT }}
+          LIGHTSAIL_SSH_PRIVATE_KEY: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
 
-          docker build \
-            -t "$ACR_LOGIN_SERVER/wealthtracker-api:$IMAGE_TAG" \
-            -f WealthTrackerServer/Dockerfile \
-            .
-          docker push "$ACR_LOGIN_SERVER/wealthtracker-api:$IMAGE_TAG"
+          : "${LIGHTSAIL_HOST:?Missing LIGHTSAIL_HOST secret}"
+          : "${LIGHTSAIL_USER:?Missing LIGHTSAIL_USER secret}"
+          : "${LIGHTSAIL_SSH_PRIVATE_KEY:?Missing LIGHTSAIL_SSH_PRIVATE_KEY secret}"
 
-          docker build \
-            -t "$ACR_LOGIN_SERVER/wealthtracker-web:$IMAGE_TAG" \
-            -f WealthTrackerClient/Dockerfile \
-            WealthTrackerClient
-          docker push "$ACR_LOGIN_SERVER/wealthtracker-web:$IMAGE_TAG"
+          LIGHTSAIL_SSH_PORT="${LIGHTSAIL_SSH_PORT:-22}"
 
-          docker build \
-            -t "$ACR_LOGIN_SERVER/wealthtracker-market-data:$IMAGE_TAG" \
-            -f MarketDataService/Dockerfile \
-            MarketDataService
-          docker push "$ACR_LOGIN_SERVER/wealthtracker-market-data:$IMAGE_TAG"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LIGHTSAIL_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/lightsail.key
+          chmod 600 ~/.ssh/lightsail.key
+          ssh-keyscan -p "$LIGHTSAIL_SSH_PORT" -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
 
-      - name: Retain last 5 images per repo (delete older)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          keep=5
-
-          cleanup_repo () {
-            local repo="$1"
-            echo "Cleaning ACR repo: $repo (keep last $keep digests)"
-
-            # Ordered newest -> oldest
-            local manifests
-            manifests="$(az acr repository show-manifests -n "$AZURE_ACR_NAME" --repository "$repo" --orderby time_desc -o json)"
-
-            # 1) Remove all untagged manifests (safe, they are not directly rollbackable by tag).
-            echo "$manifests" \
-              | jq -r '.[] | select(.tags == null or (.tags | length) == 0) | .digest' \
-              | while read -r digest; do
-                  [ -z "$digest" ] && continue
-                  az acr repository delete -n "$AZURE_ACR_NAME" --image "$repo@$digest" --yes >/dev/null
-                done
-
-            # 2) Keep only the last N unique digests (removes old tagged versions too).
-            echo "$manifests" \
-              | jq -r '.[].digest' \
-              | awk '!seen[$0]++' \
-              | tail -n +$((keep + 1)) \
-              | while read -r digest; do
-                  [ -z "$digest" ] && continue
-                  az acr repository delete -n "$AZURE_ACR_NAME" --image "$repo@$digest" --yes >/dev/null
-                done
-          }
-
-          cleanup_repo wealthtracker-api
-          cleanup_repo wealthtracker-web
-          cleanup_repo wealthtracker-market-data
-
-      - name: Deploy market-data (internal)
-        shell: bash
+      - name: Create deployment env file
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          WEB_IMAGE: ${{ needs.build.outputs.web_image }}
+          API_IMAGE: ${{ needs.build.outputs.api_image }}
+          MARKET_DATA_IMAGE: ${{ needs.build.outputs.market_data_image }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
           UPSTASH_REDIS_URL: ${{ secrets.UPSTASH_REDIS_URL }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-          CACHE_TTL_SECONDS: ${{ secrets.CACHE_TTL_SECONDS }}
-        run: |
-          set -euo pipefail
-
-          # Use a stable, short suffix on first create. Avoid forcing suffix on updates
-          # to prevent collisions when re-running the workflow for the same commit.
-          REVISION_SUFFIX="${GITHUB_SHA::7}"
-          IMAGE="$ACR_LOGIN_SERVER/wealthtracker-market-data:$IMAGE_TAG"
-
-          CREATE_ARGS=(
-            -g "$AZURE_RESOURCE_GROUP"
-            -n "$MARKETDATA_APP_NAME"
-            --environment "$AZURE_CONTAINERAPPS_ENV"
-            --image "$IMAGE"
-            --registry-server "$ACR_LOGIN_SERVER"
-            --registry-username "$ACR_USERNAME"
-            --registry-password "$ACR_PASSWORD"
-            --revision-suffix "$REVISION_SUFFIX"
-            --revisions-mode multiple
-            --max-inactive-revisions 4
-            --ingress internal
-            --target-port 8001
-            --min-replicas 1
-            --max-replicas 1
-            --cpu 0.25
-            --memory 0.5Gi
-          )
-
-          UPDATE_ARGS=(
-            -g "$AZURE_RESOURCE_GROUP"
-            -n "$MARKETDATA_APP_NAME"
-            --image "$IMAGE"
-            --max-inactive-revisions 4
-            --min-replicas 1
-            --max-replicas 1
-            --cpu 0.25
-            --memory 0.5Gi
-          )
-
-          ENV_VARS=(
-            "PORT=8001"
-            "GIT_SHA=$GITHUB_SHA"
-            "REDIS_URL=$UPSTASH_REDIS_URL"
-            "UPSTASH_REDIS_REST_URL=$UPSTASH_REDIS_REST_URL"
-            "UPSTASH_REDIS_REST_TOKEN=$UPSTASH_REDIS_REST_TOKEN"
-            "CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-300}"
-          )
-
-          if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$MARKETDATA_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${UPDATE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
-          else
-            az containerapp create "${CREATE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
-          fi
-
-      - name: Deploy API (public)
-        shell: bash
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
           JWT_PUBLIC_KEY_PEM: ${{ secrets.JWT_PUBLIC_KEY_PEM }}
+          JWT_ISSUER: ${{ vars.JWT_ISSUER }}
+          JWT_AUDIENCE: ${{ vars.JWT_AUDIENCE }}
+          JWT_ACCESS_TOKEN_EXP_MINUTES: ${{ vars.JWT_ACCESS_TOKEN_EXP_MINUTES }}
+          JWT_REFRESH_TOKEN_EXP_DAYS: ${{ vars.JWT_REFRESH_TOKEN_EXP_DAYS }}
+          CACHE_TTL_SECONDS: ${{ vars.CACHE_TTL_SECONDS }}
+          CACHE_STALE_TTL_SECONDS: ${{ vars.CACHE_STALE_TTL_SECONDS }}
+          SCANNER_REFRESH_SECONDS: ${{ vars.SCANNER_REFRESH_SECONDS }}
+          MIGRATE_ON_STARTUP: ${{ vars.MIGRATE_ON_STARTUP }}
+          MARKETDATA_TIMEOUT_SECONDS: ${{ vars.MARKETDATA_TIMEOUT_SECONDS }}
+          SERVE_STALE_WHILE_REVALIDATE: ${{ vars.SERVE_STALE_WHILE_REVALIDATE }}
+          STALE_RETRY_AFTER_MS: ${{ vars.STALE_RETRY_AFTER_MS }}
+          YF_RATE_LIMIT_SCREEN_PER_MIN: ${{ vars.YF_RATE_LIMIT_SCREEN_PER_MIN }}
+          YF_RATE_LIMIT_DOWNLOAD_PER_MIN: ${{ vars.YF_RATE_LIMIT_DOWNLOAD_PER_MIN }}
+          YF_RATE_LIMIT_TICKER_PER_MIN: ${{ vars.YF_RATE_LIMIT_TICKER_PER_MIN }}
+          REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD: ${{ vars.REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD }}
         run: |
           set -euo pipefail
 
-          REVISION_SUFFIX="${GITHUB_SHA::7}"
-          IMAGE="$ACR_LOGIN_SERVER/wealthtracker-api:$IMAGE_TAG"
-          MARKETDATA_BASE_URL="http://$MARKETDATA_APP_NAME"
-
-          # Normalize PEM values so they are safe to pass via CLI args:
-          # - if the GitHub secret is multi-line, convert newlines to literal "\n"
-          # - if it's already one-line with "\n", leave it unchanged
-          JWT_PRIVATE_ESCAPED="${JWT_PRIVATE_KEY_PEM//$'\r'/}"
-          JWT_PRIVATE_ESCAPED="${JWT_PRIVATE_ESCAPED//$'\n'/\\n}"
-          JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_KEY_PEM//$'\r'/}"
-          JWT_PUBLIC_ESCAPED="${JWT_PUBLIC_ESCAPED//$'\n'/\\n}"
-
-          # Fail fast if the secrets look like file paths or non-PEM payloads.
-          # The app expects actual PEM content (with BEGIN/END lines), not a path like "/app/keys/public.pem".
-          if [[ "$JWT_PUBLIC_ESCAPED" != *"BEGIN PUBLIC KEY"* ]]; then
-            echo "::error title=Invalid JWT_PUBLIC_KEY_PEM::Expected PEM content containing 'BEGIN PUBLIC KEY'. Do not set this to a file path."
-            exit 1
-          fi
-
-          if [[ "$JWT_PRIVATE_ESCAPED" != *"BEGIN PRIVATE KEY"* && "$JWT_PRIVATE_ESCAPED" != *"BEGIN RSA PRIVATE KEY"* ]]; then
-            echo "::error title=Invalid JWT_PRIVATE_KEY_PEM::Expected PEM content containing 'BEGIN PRIVATE KEY' or 'BEGIN RSA PRIVATE KEY'. Do not set this to a file path."
-            exit 1
-          fi
-
-          CREATE_ARGS=(
-            -g "$AZURE_RESOURCE_GROUP"
-            -n "$API_APP_NAME"
-            --environment "$AZURE_CONTAINERAPPS_ENV"
-            --image "$IMAGE"
-            --registry-server "$ACR_LOGIN_SERVER"
-            --registry-username "$ACR_USERNAME"
-            --registry-password "$ACR_PASSWORD"
-            --revision-suffix "$REVISION_SUFFIX"
-            --revisions-mode multiple
-            --max-inactive-revisions 4
-            --ingress external
-            --target-port 5141
-            --min-replicas 1
-            --max-replicas 1
-            --cpu 0.25
-            --memory 0.5Gi
+          required=(
+            FRONTEND_URL
+            NEON_CONNECTION_STRING
+            UPSTASH_REDIS_URL
+            GOOGLE_CLIENT_ID
+            GOOGLE_CLIENT_SECRET
+            JWT_PRIVATE_KEY_PEM
+            JWT_PUBLIC_KEY_PEM
           )
 
-          UPDATE_ARGS=(
-            -g "$AZURE_RESOURCE_GROUP"
-            -n "$API_APP_NAME"
-            --image "$IMAGE"
-            --max-inactive-revisions 4
-            --min-replicas 1
-            --max-replicas 1
-            --cpu 0.25
-            --memory 0.5Gi
-          )
+          for key in "${required[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error title=Missing required secret::$key is required"
+              exit 1
+            fi
+          done
 
-          ENV_VARS=(
-            "PORT=5141"
-            "GIT_SHA=$GITHUB_SHA"
-            # Apply EF Core migrations on container startup to avoid schema drift on deploy.
-            # Keep API replicas at 1 to reduce the chance of concurrent migration runs.
-            "MIGRATE_ON_STARTUP=1"
-            "FrontendUrl=https://example.com"
-            "MarketDataService__BaseUrl=$MARKETDATA_BASE_URL"
-            "MarketDataService__TimeoutSeconds=60"
-            "ConnectionStrings__DefaultConnection=$NEON_CONNECTION_STRING"
-            "Authentication__Google__ClientId=$GOOGLE_CLIENT_ID"
-            "Authentication__Google__ClientSecret=$GOOGLE_CLIENT_SECRET"
-            "Authentication__Google__RedirectUri=https://example.com/auth/callback"
-            "Authentication__Jwt__Issuer=WealthTracker"
-            "Authentication__Jwt__Audience=WealthTrackerApi"
-            "Authentication__Jwt__AccessTokenExpirationMinutes=60"
-            "Authentication__Jwt__RefreshTokenExpirationDays=7"
-            "Authentication__Jwt__RsaPrivateKeyPem=$JWT_PRIVATE_ESCAPED"
-            "Authentication__Jwt__RsaPublicKeyPem=$JWT_PUBLIC_ESCAPED"
-          )
+          JWT_PRIVATE_KEY_PEM="${JWT_PRIVATE_KEY_PEM//$'\r'/}"
+          JWT_PRIVATE_KEY_PEM="${JWT_PRIVATE_KEY_PEM//$'\n'/\\n}"
+          JWT_PUBLIC_KEY_PEM="${JWT_PUBLIC_KEY_PEM//$'\r'/}"
+          JWT_PUBLIC_KEY_PEM="${JWT_PUBLIC_KEY_PEM//$'\n'/\\n}"
 
-          if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$API_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${UPDATE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
-          else
-            az containerapp create "${CREATE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
-          fi
+          write_kv() {
+            printf '%s=%s\n' "$1" "$2" >> lightsail.env
+          }
 
-          API_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$API_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
-          echo "API_FQDN=$API_FQDN" >> "$GITHUB_ENV"
+          : > lightsail.env
 
-      - name: Deploy web (public)
-        shell: bash
+          write_kv "WEB_IMAGE" "$WEB_IMAGE"
+          write_kv "API_IMAGE" "$API_IMAGE"
+          write_kv "MARKET_DATA_IMAGE" "$MARKET_DATA_IMAGE"
+
+          write_kv "FRONTEND_URL" "$FRONTEND_URL"
+          write_kv "NEON_CONNECTION_STRING" "$NEON_CONNECTION_STRING"
+          write_kv "UPSTASH_REDIS_URL" "$UPSTASH_REDIS_URL"
+          write_kv "UPSTASH_REDIS_REST_URL" "${UPSTASH_REDIS_REST_URL:-}"
+          write_kv "UPSTASH_REDIS_REST_TOKEN" "${UPSTASH_REDIS_REST_TOKEN:-}"
+
+          write_kv "GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_ID"
+          write_kv "GOOGLE_CLIENT_SECRET" "$GOOGLE_CLIENT_SECRET"
+
+          write_kv "JWT_PRIVATE_KEY_PEM" "$JWT_PRIVATE_KEY_PEM"
+          write_kv "JWT_PUBLIC_KEY_PEM" "$JWT_PUBLIC_KEY_PEM"
+          write_kv "JWT_ISSUER" "${JWT_ISSUER:-WealthTracker}"
+          write_kv "JWT_AUDIENCE" "${JWT_AUDIENCE:-WealthTrackerApi}"
+          write_kv "JWT_ACCESS_TOKEN_EXP_MINUTES" "${JWT_ACCESS_TOKEN_EXP_MINUTES:-60}"
+          write_kv "JWT_REFRESH_TOKEN_EXP_DAYS" "${JWT_REFRESH_TOKEN_EXP_DAYS:-7}"
+
+          write_kv "CACHE_TTL_SECONDS" "${CACHE_TTL_SECONDS:-300}"
+          write_kv "CACHE_STALE_TTL_SECONDS" "${CACHE_STALE_TTL_SECONDS:-86400}"
+          write_kv "SCANNER_REFRESH_SECONDS" "${SCANNER_REFRESH_SECONDS:-300}"
+          write_kv "MIGRATE_ON_STARTUP" "${MIGRATE_ON_STARTUP:-1}"
+          write_kv "MARKETDATA_TIMEOUT_SECONDS" "${MARKETDATA_TIMEOUT_SECONDS:-60}"
+          write_kv "SERVE_STALE_WHILE_REVALIDATE" "${SERVE_STALE_WHILE_REVALIDATE:-1}"
+          write_kv "STALE_RETRY_AFTER_MS" "${STALE_RETRY_AFTER_MS:-15000}"
+          write_kv "YF_RATE_LIMIT_SCREEN_PER_MIN" "${YF_RATE_LIMIT_SCREEN_PER_MIN:-6}"
+          write_kv "YF_RATE_LIMIT_DOWNLOAD_PER_MIN" "${YF_RATE_LIMIT_DOWNLOAD_PER_MIN:-10}"
+          write_kv "YF_RATE_LIMIT_TICKER_PER_MIN" "${YF_RATE_LIMIT_TICKER_PER_MIN:-15}"
+          write_kv "REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD" "${REL_VOL_REUSE_PRIMARY_1M_DOWNLOAD:-1}"
+
+      - name: Validate compose rendering
+        run: |
+          set -euo pipefail
+          docker compose \
+            --env-file lightsail.env \
+            -f deploy/lightsail/docker-compose.lightsail.yml \
+            config > /dev/null
+
+      - name: Upload deployment bundle
         env:
-          IMAGE_TAG: ${{ github.sha }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          CACHE_TTL_SECONDS: ${{ secrets.CACHE_TTL_SECONDS }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_SSH_PORT: ${{ secrets.LIGHTSAIL_SSH_PORT }}
         run: |
           set -euo pipefail
 
-          REVISION_SUFFIX="${GITHUB_SHA::7}"
-          IMAGE="$ACR_LOGIN_SERVER/wealthtracker-web:$IMAGE_TAG"
-          API_BASE_URL="https://$API_FQDN/api"
+          LIGHTSAIL_SSH_PORT="${LIGHTSAIL_SSH_PORT:-22}"
+          SSH_TARGET="${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}"
 
-          CREATE_ARGS=(
-            -g "$AZURE_RESOURCE_GROUP"
-            -n "$WEB_APP_NAME"
-            --environment "$AZURE_CONTAINERAPPS_ENV"
-            --image "$IMAGE"
-            --registry-server "$ACR_LOGIN_SERVER"
-            --registry-username "$ACR_USERNAME"
-            --registry-password "$ACR_PASSWORD"
-            --revision-suffix "$REVISION_SUFFIX"
-            --revisions-mode multiple
-            --max-inactive-revisions 4
-            --ingress external
-            --target-port 8080
-            --min-replicas 1
-            --max-replicas 1
-            --cpu 0.25
-            --memory 0.5Gi
-          )
+          scp -i ~/.ssh/lightsail.key -P "$LIGHTSAIL_SSH_PORT" \
+            deploy/lightsail/docker-compose.lightsail.yml \
+            "$SSH_TARGET:/tmp/docker-compose.lightsail.yml"
 
-          UPDATE_ARGS=(
-            -g "$AZURE_RESOURCE_GROUP"
-            -n "$WEB_APP_NAME"
-            --image "$IMAGE"
-            --max-inactive-revisions 4
-            --min-replicas 1
-            --max-replicas 1
-            --cpu 0.25
-            --memory 0.5Gi
-          )
+          scp -i ~/.ssh/lightsail.key -P "$LIGHTSAIL_SSH_PORT" \
+            deploy/lightsail/nginx.default.conf.template \
+            "$SSH_TARGET:/tmp/nginx.default.conf.template"
 
-          ENV_VARS=(
-            "PORT=8080"
-            "GIT_SHA=$GITHUB_SHA"
-            "API_BASE_URL=$API_BASE_URL"
-            "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
-            "GOOGLE_REDIRECT_URI=https://example.com/auth/callback"
-            "SCANNER_REFRESH_SECONDS=${CACHE_TTL_SECONDS:-300}"
-          )
+          scp -i ~/.ssh/lightsail.key -P "$LIGHTSAIL_SSH_PORT" \
+            lightsail.env \
+            "$SSH_TARGET:/tmp/lightsail.env"
 
-          if az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" >/dev/null 2>&1; then
-            az containerapp update "${UPDATE_ARGS[@]}" --set-env-vars "${ENV_VARS[@]}" >/dev/null
-          else
-            az containerapp create "${CREATE_ARGS[@]}" --env-vars "${ENV_VARS[@]}" >/dev/null
+          ssh -i ~/.ssh/lightsail.key -p "$LIGHTSAIL_SSH_PORT" "$SSH_TARGET" '
+            set -euo pipefail
+            sudo mkdir -p /opt/wealthtracker
+            sudo mv /tmp/docker-compose.lightsail.yml /opt/wealthtracker/docker-compose.lightsail.yml
+            sudo mv /tmp/nginx.default.conf.template /opt/wealthtracker/nginx.default.conf.template
+            sudo mv /tmp/lightsail.env /opt/wealthtracker/.env
+            sudo chown -R $USER:$USER /opt/wealthtracker
+          '
+
+      - name: Deploy and restart containers
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_SSH_PORT: ${{ secrets.LIGHTSAIL_SSH_PORT }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          : "${GHCR_READ_TOKEN:?Missing GHCR_READ_TOKEN secret}"
+
+          LIGHTSAIL_SSH_PORT="${LIGHTSAIL_SSH_PORT:-22}"
+          SSH_TARGET="${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}"
+
+          printf '%s' "$GHCR_READ_TOKEN" | ssh -i ~/.ssh/lightsail.key -p "$LIGHTSAIL_SSH_PORT" "$SSH_TARGET" "
+            set -euo pipefail
+            cd /opt/wealthtracker
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo 'docker is not installed on the instance' >&2
+              exit 1
+            fi
+
+            if ! docker compose version >/dev/null 2>&1; then
+              echo 'docker compose plugin is not installed on the instance' >&2
+              exit 1
+            fi
+
+            docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin
+            docker compose --env-file .env -f docker-compose.lightsail.yml pull
+            docker compose --env-file .env -f docker-compose.lightsail.yml up -d --remove-orphans
+            docker image prune -af --filter 'until=72h'
+          "
+
+      - name: Verify deployment
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_SSH_PORT: ${{ secrets.LIGHTSAIL_SSH_PORT }}
+        run: |
+          set -euo pipefail
+
+          LIGHTSAIL_SSH_PORT="${LIGHTSAIL_SSH_PORT:-22}"
+          SSH_TARGET="${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}"
+
+          ssh -i ~/.ssh/lightsail.key -p "$LIGHTSAIL_SSH_PORT" "$SSH_TARGET" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          web_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/)
+          if [[ "$web_code" != "200" ]]; then
+            echo "Web check failed with HTTP $web_code" >&2
+            exit 1
           fi
 
-          WEB_FQDN="$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)"
-          echo "WEB_FQDN=$WEB_FQDN" >> "$GITHUB_ENV"
-
-      - name: Finalize URLs (CORS + OAuth redirect URIs)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          WEB_URL="https://$WEB_FQDN"
-          API_BASE_URL="https://$API_FQDN/api"
-
-          az containerapp update \
-            -g "$AZURE_RESOURCE_GROUP" \
-            -n "$API_APP_NAME" \
-            --set-env-vars \
-              "FrontendUrl=$WEB_URL" \
-              "Authentication__Google__RedirectUri=$WEB_URL/auth/callback" \
-            >/dev/null
-
-          az containerapp update \
-            -g "$AZURE_RESOURCE_GROUP" \
-            -n "$WEB_APP_NAME" \
-            --set-env-vars \
-              "API_BASE_URL=$API_BASE_URL" \
-              "GOOGLE_REDIRECT_URI=$WEB_URL/auth/callback" \
-            >/dev/null
-
-          echo "Deployed:"
-          echo "  Web: $WEB_URL"
-          echo "  API: https://$API_FQDN"
-
-      - name: Ensure daily warmup job (scanner cache)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          JOB_NAME="wealthtracker-warmup"
-          # Container Apps Job cron is evaluated in UTC.
-          # Daily refresh at 14:35 UTC.
-          CRON_EXPRESSION="35 14 * * *"
-          API_BASE_URL="https://$API_FQDN/api"
-
-          # NOTE: `az containerapp job create/update --args` accepts a SINGLE string which is parsed
-          # into args. Use quotes so `/bin/sh -lc` receives the script as one argument.
-          ARGS="-lc 'set -eu; API=\"$API_BASE_URL\"; for p in scanner/day-gainers scanner/hod-breakouts scanner/vwap-breakouts scanner/volume-spikes scanner/hod-approach scanner/vwap-approach; do echo \"Warming \$p\"; curl -fsS -X POST \"\$API/\$p\" -H \"Content-Type: application/json\" -d \"{}\" >/dev/null; done'"
-
-          if az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$JOB_NAME" >/dev/null 2>&1; then
-            az containerapp job update \
-              -g "$AZURE_RESOURCE_GROUP" \
-              -n "$JOB_NAME" \
-              --cron-expression "$CRON_EXPRESSION" \
-              --image "curlimages/curl:8.5.0" \
-              --cpu "0.25" --memory "0.5Gi" \
-              --replica-retry-limit 1 \
-              --replica-completion-count 1 \
-              --parallelism 1 \
-              --replica-timeout 1800 \
-              --command "/bin/sh" \
-              --args "$ARGS" \
-              >/dev/null
-          else
-            az containerapp job create \
-              -g "$AZURE_RESOURCE_GROUP" \
-              -n "$JOB_NAME" \
-              --environment "$AZURE_CONTAINERAPPS_ENV" \
-              --trigger-type "Schedule" \
-              --cron-expression "$CRON_EXPRESSION" \
-              --image "curlimages/curl:8.5.0" \
-              --cpu "0.25" --memory "0.5Gi" \
-              --replica-retry-limit 1 \
-              --replica-completion-count 1 \
-              --parallelism 1 \
-              --replica-timeout 1800 \
-              --command "/bin/sh" \
-              --args "$ARGS" \
-              >/dev/null
+          api_code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/api/)
+          if [[ "$api_code" != "401" && "$api_code" != "404" ]]; then
+            echo "API gateway check failed with HTTP $api_code" >&2
+            exit 1
           fi
 
-          echo "Warmup job ensured: $JOB_NAME (cron: $CRON_EXPRESSION)"
+          cd /opt/wealthtracker
+          docker compose --env-file .env -f docker-compose.lightsail.yml ps
+          REMOTE
+
+  cleanup-ghcr:
+    name: Cleanup old GHCR image versions
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - deploy
+    if: needs.build.outputs.should_push == 'true' && needs.deploy.result == 'success'
+
+    strategy:
+      matrix:
+        package_name:
+          - wealthtracker-web
+          - wealthtracker-api
+          - wealthtracker-market-data
+
+    steps:
+      - name: Delete old versions
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ github.repository_owner }}
+          package-name: ${{ matrix.package_name }}
+          package-type: container
+          min-versions-to-keep: 5
+          token: ${{ secrets.GITHUB_TOKEN }}
