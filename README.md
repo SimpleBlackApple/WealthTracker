@@ -2,7 +2,7 @@
 
 A market scanner + paper trading desk I built for tracking intraday momentum.
 
-**Live demo:** https://wealthtracker-web.happyriver-14605681.australiaeast.azurecontainerapps.io/  
+**Live demo:** https://www.wealthtrackertrading.com/  
 **My LinkedIn:** https://www.linkedin.com/in/shawn-lee2025/
 
 ## What It Does
